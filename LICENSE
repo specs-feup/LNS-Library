@@ -1,0 +1,83 @@
+Copyright (c) 2026 Henrique dos Santos Teixeira. All rights reserved.
+
+PROPRIETARY SOFTWARE LICENSE AND NON-DISCLOSURE AGREEMENT
+
+This software and all associated source code, documentation, data files, and
+related materials (collectively, the "Software") are the exclusive proprietary
+property of the author. All rights reserved.
+
+────────────────────────────────────────────────────────────────────────────────
+1. GRANT OF ACCESS
+
+Access to this Software is granted solely to individuals who have received it
+directly from the author. No rights are granted beyond those explicitly stated
+in this license.
+
+────────────────────────────────────────────────────────────────────────────────
+2. RESTRICTIONS
+
+You may NOT, without prior written permission from the author:
+
+  a) Copy, reproduce, or duplicate the Software or any portion thereof.
+  b) Distribute, publish, sublicense, sell, or otherwise transfer the Software
+     or any derivative works to any third party.
+  c) Modify, adapt, translate, reverse engineer, decompile, or disassemble the
+     Software.
+  d) Use the Software for any commercial purpose or for any public display.
+  e) Remove or alter any proprietary notices, labels, or marks on the Software.
+  f) Use the Software as the basis for a competing product or service.
+
+────────────────────────────────────────────────────────────────────────────────
+3. NON-DISCLOSURE
+
+You agree to hold the Software and all information contained therein in strict
+confidence. You agree not to disclose the Software, its design, architecture,
+algorithms, or any related technical information to any third party without
+prior written consent from the author. This obligation of confidentiality
+survives termination of any agreement between you and the author and continues
+indefinitely.
+
+────────────────────────────────────────────────────────────────────────────────
+4. OWNERSHIP
+
+The Software is and remains the sole and exclusive property of the author.
+This license does not constitute a sale or transfer of ownership. No title or
+intellectual property rights in the Software are transferred to you.
+
+────────────────────────────────────────────────────────────────────────────────
+5. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. THE AUTHOR MAKES NO
+REPRESENTATION THAT THE SOFTWARE WILL MEET YOUR REQUIREMENTS OR THAT ITS
+OPERATION WILL BE UNINTERRUPTED OR ERROR-FREE.
+
+────────────────────────────────────────────────────────────────────────────────
+6. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
+OF THE POSSIBILITY OF SUCH DAMAGE.
+
+────────────────────────────────────────────────────────────────────────────────
+7. TERMINATION
+
+This license is effective until terminated. It will terminate automatically
+and without notice if you fail to comply with any of its terms. Upon
+termination, you must immediately destroy all copies of the Software in your
+possession.
+
+────────────────────────────────────────────────────────────────────────────────
+8. GOVERNING LAW
+
+This license shall be governed by and construed in accordance with the laws of
+the laws of Portugal, without regard to its conflict of law provisions.
+
+────────────────────────────────────────────────────────────────────────────────
+
+All rights not expressly granted herein are reserved by the author.
