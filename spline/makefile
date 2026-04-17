@@ -22,5 +22,11 @@ tables: $(BIN) | $(LNS)
 	$(BIN) --gen --xmb 41 40 --lns8  4
 	$(BIN) --gen --xmb 12 42 --lns16 8
 
+tables2: $(BIN) | $(LNS)
+	$(BIN) --gen --xf  40 34  --lns8  4
+	$(BIN) --gen --xf  40 100 --lns16 8
+	$(BIN) --gen --xmb 41 40  --lns8  4
+	$(BIN) --gen --xmb 40 100 --lns16 8
+
 clean:
 	rm -rf $(LNS) $(BUILD)

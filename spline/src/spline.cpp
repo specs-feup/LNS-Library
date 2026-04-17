@@ -415,7 +415,7 @@ i32 main(i32 argc, char* argv[]) {
   std::cout << "Test: " << std::endl;
   std::cout << "  " << (xf ? "xf" : "xmb") << std::endl;
   std::cout << "  max table size: " << s_max << std::endl;
-  std::cout << "  lns" << (lns16 ? "16" : "8") << " Q" << (15 - precision) << "." << precision << std::endl;
+  std::cout << "  lns" << (lns16 ? "16" : "8") << " Q" << ((lns16 ? 15 : 7) - precision) << "." << precision << std::endl;
 
   test_table_sizes(s_max, 0, xf, lns16, precision);
   test_table_sizes(s_max, 1, xf, lns16, precision);

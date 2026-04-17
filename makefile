@@ -1,84 +1,128 @@
 CXX = g++
+DEBUG =
 
 CXX_SYSINCLUDE ?= $(shell $(CXX) -v -x c++ /dev/null 2>&1 \
     | grep '^ /' | head -1 | xargs)
+
 ifeq ($(CXX_SYSINCLUDE),)
   CXX_SYSINCLUDE = /usr/local/include
 endif
 
 BUILD_DIR = build
+SRC_DIR   = src
+LIB_DIR   = lib
 PREFIX   ?= /usr/local
-CXXFLAGS  = -std=c++17 -Wall -Werror -g -O2 -I./lib/sim
 
-MAIN_SRC = src/main.cpp
+CXXFLAGS  = -std=c++17 -Wall -Werror -g -O2 \
+            -I./$(LIB_DIR)/lnssim \
+            -I./$(LIB_DIR)/bfloatsim \
+            $(DEBUG)
+
+# ---------- sources ----------
+MAIN_SRC = $(SRC_DIR)/main.cpp
 MAIN_OBJ = $(BUILD_DIR)/main.o
 TARGET   = $(BUILD_DIR)/lns_test
 
-HDR_LNS    = lib/lns/lns.hpp
-HDR_LNSSIM = lib/sim/lns_sim.hpp
-HDR_LUTS   = lib/sim/lns_luts.hpp
-HDR_UTILS  = lib/sim/utils.h
+TINY_LNS16_SRC  = $(SRC_DIR)/tiny_lns16.cpp
+TINY_BF16_SRC   = $(SRC_DIR)/tiny_bf16.cpp
+CONV_BF16_SRC   = $(SRC_DIR)/convert_bf16.cpp
+CONV_LNS16_SRC  = $(SRC_DIR)/convert_lns16.cpp
+
+# ---------- headers ----------
+HDR_LNS       = $(LIB_DIR)/lns/lns.hpp
+HDR_LNSSIM    = $(LIB_DIR)/lnssim/lnssim.hpp
+HDR_LUTS      = $(LIB_DIR)/lnssim/lnsluts.hpp
+HDR_UTILS_LNS = $(LIB_DIR)/lnssim/utils.h
+HDR_BFLOATSIM = $(LIB_DIR)/bfloatsim/bfloatsim.hpp
+HDR_UTILS_BF  = $(LIB_DIR)/bfloatsim/utils.h
 
 RED   = \033[031m
 GREEN = \033[032m
 BLUE  = \033[036m
 RESET = \033[0m
 
-.PHONY: all test install uninstall loc clean
+.PHONY: all xf xmb test install uninstall loc clean \
+        tiny_xf tiny_xmb \
+        convert_bf16 convert_lns16 \
+        test_xf test_xmb
 
-all: $(BUILD_DIR) $(TARGET)
+all: xf
 
-test: all
-	@echo "$(BLUE)================= Running tests =================$(RESET)"
-	@total=0; passed=0; failed=0; \
-	for f in test/*; do \
-		[ -f "$$f" ] || continue; \
-		total=$$((total+1)); \
-		name=$$(basename "$$f"); \
-		num=$$(echo "$$name" | sed 's/[^0-9]//g'); \
-		expected="test/true_test$$num.bin"; \
-		output="test/test$$num.bin"; \
-		printf "$(BLUE)Test %s: $(RESET)" "$$name"; \
-		$(TARGET) "$$f" > "test/test$$num.log" 2>&1; \
-		status=$$?; \
-		if [ -f "$$expected" ]; then \
-			if diff "$$output" "$$expected" > /dev/null 2>&1; then \
-				echo "$(GREEN)PASSED$(RESET)"; passed=$$((passed+1)); \
-			else \
-				echo "$(RED)FAILED (diff mismatch)$(RESET)"; failed=$$((failed+1)); \
-			fi; \
-		else \
-			if [ $$status -eq 0 ]; then \
-				echo "$(GREEN)PASSED$(RESET)"; passed=$$((passed+1)); \
-			else \
-				echo "$(RED)FAILED$(RESET)"; failed=$$((failed+1)); \
-			fi; \
-		fi; \
-	done; \
-	echo "$(BLUE)=================================================$(RESET)"; \
-	echo "$(GREEN)PASSED $$passed/$$total tests$(RESET)"; \
-	if [ $$failed -ne 0 ]; then \
-		echo "$(RED)$$failed tests failed$(RESET)"; exit 1; \
-	else \
-		echo "$(GREEN)All tests passed ✔$(RESET)"; \
-	fi
+# ---------- main lns_test ----------
+xf: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling lns_test with SPLINE_XF...$(RESET)"
+	$(CXX) $(CXXFLAGS) -DSPLINE_XF -c $(MAIN_SRC) -o $(MAIN_OBJ)
+	$(CXX) $(CXXFLAGS) -DSPLINE_XF $(MAIN_OBJ) -o $(TARGET)
+	@echo "$(GREEN)Build complete → $(TARGET) (XF)$(RESET)"
 
+xmb: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling lns_test with SPLINE_XMB...$(RESET)"
+	$(CXX) $(CXXFLAGS) -DSPLINE_XMB -c $(MAIN_SRC) -o $(MAIN_OBJ)
+	$(CXX) $(CXXFLAGS) -DSPLINE_XMB $(MAIN_OBJ) -o $(TARGET)
+	@echo "$(GREEN)Build complete → $(TARGET) (XMB)$(RESET)"
+
+# ---------- tiny ----------
+tiny_xf: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling tiny with SPLINE_XF...$(RESET)"
+	$(CXX) $(CXXFLAGS) -fopenmp -DSPLINE_XF $(TINY_LNS16_SRC) -o $(BUILD_DIR)/tiny_xf -lm
+	@echo "$(GREEN)Build complete → $(BUILD_DIR)/tiny_xf$(RESET)"
+
+tiny_xmb: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling tiny with SPLINE_XMB...$(RESET)"
+	$(CXX) $(CXXFLAGS) -fopenmp -DSPLINE_XMB $(TINY_LNS16_SRC) -o $(BUILD_DIR)/tiny_xmb -lm
+	@echo "$(GREEN)Build complete → $(BUILD_DIR)/tiny_xmb$(RESET)"
+
+tiny_bf16: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling tiny with bf16...$(RESET)"
+	$(CXX) $(CXXFLAGS) -fopenmp $(TINY_BF16_SRC) -o $(BUILD_DIR)/tiny_bf16 -lm
+	@echo "$(GREEN)Build complete → $(BUILD_DIR)/tiny_bf16$(RESET)"
+
+# ---------- converters ----------
+convert_bf16: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling convert_bf16...$(RESET)"
+	$(CXX) $(CXXFLAGS) $(CONV_BF16_SRC) -o $(BUILD_DIR)/convert_bf16
+	@echo "$(GREEN)Build complete → $(BUILD_DIR)/convert_bf16$(RESET)"
+
+convert_lns16: $(BUILD_DIR)
+	@echo "$(BLUE)Compiling convert_lns16 (XF + XMB)...$(RESET)"
+	$(CXX) $(CXXFLAGS) -DSPLINE_XF  $(CONV_LNS16_SRC) -o $(BUILD_DIR)/convert_lns16_xf
+	$(CXX) $(CXXFLAGS) -DSPLINE_XMB $(CONV_LNS16_SRC) -o $(BUILD_DIR)/convert_lns16_xmb
+	@echo "$(GREEN)Build complete → convert_lns16_xf, convert_lns16_xmb$(RESET)"
+
+# ---------- test runs ----------
+test_xf: xf
+	@echo "$(GREEN)Running lns_test with XF tables...$(RESET)"
+	$(TARGET) spline/lns_tables/xf_8_q4_3.lns spline/lns_tables/xf_16_q8_7.lns 100000
+
+test_xmb: xmb
+	@echo "$(GREEN)Running lns_test with XMB tables...$(RESET)"
+	$(TARGET) spline/lns_tables/xmb_8_q4_3.lns spline/lns_tables/xmb_16_q8_7.lns 100000
+
+# ---------- install / uninstall ----------
 install:
 	@echo "$(BLUE)Installing headers to $(CXX_SYSINCLUDE)...$(RESET)"
 	install -d $(CXX_SYSINCLUDE)
-	install -m 644 $(HDR_LNS)    $(CXX_SYSINCLUDE)/lns
-	install -m 644 $(HDR_LNSSIM) $(CXX_SYSINCLUDE)/lnssim
-	install -m 644 $(HDR_LUTS)   $(CXX_SYSINCLUDE)/lns_luts.hpp
-	install -m 644 $(HDR_UTILS)  $(CXX_SYSINCLUDE)/lns_utils.h
-	@echo "$(GREEN)Done — you can now use #include <lns> and #include <lnssim>$(RESET)"
+	install -m 644 $(HDR_LNS)       $(CXX_SYSINCLUDE)/lns.hpp
+	install -m 644 $(HDR_LNSSIM)    $(CXX_SYSINCLUDE)/lnssim.hpp
+	install -m 644 $(HDR_LUTS)      $(CXX_SYSINCLUDE)/lnsluts.hpp
+	install -m 644 $(HDR_UTILS_LNS) $(CXX_SYSINCLUDE)/lns_utils.h
+	install -m 644 $(HDR_BFLOATSIM) $(CXX_SYSINCLUDE)/bfloatsim.hpp
+	install -m 644 $(HDR_UTILS_BF)  $(CXX_SYSINCLUDE)/bfloat_utils.h
+	@echo "$(GREEN)Done$(RESET)"
 
 uninstall:
 	@echo "$(BLUE)Removing installed headers from $(CXX_SYSINCLUDE)...$(RESET)"
-	rm -f $(CXX_SYSINCLUDE)/lns
-	rm -f $(CXX_SYSINCLUDE)/lnssim
-	rm -f $(CXX_SYSINCLUDE)/lns_luts.hpp
+	rm -f $(CXX_SYSINCLUDE)/lns.hpp
+	rm -f $(CXX_SYSINCLUDE)/lnssim.hpp
+	rm -f $(CXX_SYSINCLUDE)/lnsluts.hpp
 	rm -f $(CXX_SYSINCLUDE)/lns_utils.h
+	rm -f $(CXX_SYSINCLUDE)/bfloatsim.hpp
+	rm -f $(CXX_SYSINCLUDE)/bfloat_utils.h
 	@echo "$(GREEN)Uninstall complete$(RESET)"
+
+# ---------- misc ----------
+$(BUILD_DIR):
+	mkdir -p $@
 
 loc:
 	@echo "----------------------------------------"
@@ -93,30 +137,6 @@ loc:
 		[ $$lines -gt 0 ] && printf "%-10s | %10d\n" "$$ext" "$$lines"; \
 	done
 	@echo "----------------------------------------"
-
-$(BUILD_DIR):
-	mkdir -p $@
-
-$(MAIN_OBJ): $(MAIN_SRC) $(HDR_LNS) $(HDR_LNSSIM) $(HDR_LUTS) $(HDR_UTILS) | $(BUILD_DIR)
-	@echo "$(BLUE)Compiling $(MAIN_SRC)...$(RESET)"
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(TARGET): $(MAIN_OBJ)
-	@echo "$(BLUE)Linking $(TARGET)...$(RESET)"
-	$(CXX) $(CXXFLAGS) $< -o $@
-	@echo "$(GREEN)Build complete → $(TARGET)$(RESET)"
-
-test_xf: $(BUILD_DIR)
-	@echo "$(BLUE)Compiling with SPLINE_XF...$(RESET)"
-	$(CXX) $(CXXFLAGS) -DSPLINE_XF $(MAIN_SRC) -o $(TARGET)
-	@echo "$(GREEN)Running lns_test with XF tables...$(RESET)"
-	$(TARGET) spline/lns_tables/xf_8_q4_3.lns spline/lns_tables/xf_16_q8_7.lns 100000
-
-test_xmb: $(BUILD_DIR)
-	@echo "$(BLUE)Compiling with SPLINE_XMB...$(RESET)"
-	$(CXX) $(CXXFLAGS) -DSPLINE_XMB $(MAIN_SRC) -o $(TARGET)
-	@echo "$(GREEN)Running lns_test with XMB tables...$(RESET)"
-	$(TARGET) spline/lns_tables/xmb_8_q4_3.lns spline/lns_tables/xmb_16_q8_7.lns 100000
 
 clean:
 	@echo "$(BLUE)Cleaning build directory...$(RESET)"
