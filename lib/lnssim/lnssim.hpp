@@ -213,7 +213,16 @@ struct lns {
       return lns(LNS_ZERO(n), false);
 
     const uint_t<n> _sign = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
-    int_t<n> combined_exp = exp() + other.exp();
+
+    const int_t<n> exp1         = exp();
+    const int_t<n> exp2         = other.exp();
+    const int_t<n> combined_exp = exp1 + exp2;
+
+    const bool exp1_neg   = (exp1         >> (n - 2)) & 1;
+    const bool exp2_neg   = (exp2         >> (n - 2)) & 1;
+    const bool result_neg = (combined_exp >> (n - 2)) & 1;
+    if ((exp1_neg == exp2_neg) && (result_neg != exp1_neg))
+      fprintf(stderr, "[LNS WARN]: Overflow detected in multiplication.\n");
 
     // Prevent arithmetic from accidentally creating a Zero sentinel
     // If we hit 0x4000, we slightly shift it to keep it "Not Zero"
@@ -229,13 +238,22 @@ struct lns {
       fprintf(stderr, "[LNS FATAL]: Division by Zero detected.\n");
       exit(139);
     }
-    
+
     if (this->is_zero())
       return *this;
 
-    const uint_t<n>
-      _sign = (uint_t<n>)(sign() ^ other.sign()) << (n - 1),
-      _exp  = (exp() - other.exp()) & ((1 << (n - 1)) - 1);
+    const int_t<n> exp1       = exp();
+    const int_t<n> exp2       = other.exp();
+    const int_t<n> result_exp = exp1 - exp2;
+
+    const bool exp1_neg   = (exp1       >> (n - 2)) & 1;
+    const bool exp2_neg   = (exp2       >> (n - 2)) & 1;
+    const bool result_neg = (result_exp >> (n - 2)) & 1;
+    if ((exp1_neg != exp2_neg) && (result_neg != exp1_neg))
+      fprintf(stderr, "[LNS WARN]: Overflow detected in division.\n");
+
+    const uint_t<n> _sign = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
+    const uint_t<n> _exp  = (uint_t<n>)result_exp & ((1 << (n - 1)) - 1);
 
     return lns(_sign | _exp, false);
   }

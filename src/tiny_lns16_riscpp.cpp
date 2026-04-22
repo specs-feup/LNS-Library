@@ -8,9 +8,7 @@
 #include <cstring>
 #include <fcntl.h>
 
-#include "lnssim.hpp"
-typedef lns<16, 8, 7> lns16;
-// typedef lns<8, 4, 3> lns8;
+#include "lns.hpp"
 
 #if defined _WIN32
   #include "win.h"

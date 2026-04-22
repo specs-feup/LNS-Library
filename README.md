@@ -181,3 +181,26 @@ The current candidate is Newton's divided differences, which constructs an inter
 Other candidates under consideration include minimax polynomial approximation (Remez algorithm), which minimises the worst-case error across the entire domain rather than passing exactly through sample points, and piecewise Chebyshev approximation, which combines the efficiency of segmented tables with near-optimal polynomial coefficients per segment.
 
 The goal is to support lns32 Q16.15 and lns64 Q32.31 with approximation error comparable to the precision of the format itself, without requiring lookup tables that would be impractical to store in hardware.
+
+## Models
+
+```
+wget https://huggingface.co/karpathy/tinyllamas/resolve/main/stories42M.bin
+```
+
+```
+wget https://huggingface.co/karpathy/tinyllamas/resolve/main/stories15M.bin
+```
+
+```
+wget https://huggingface.co/karpathy/tinyllamas/resolve/main/stories260K.bin
+```
+
+```
+wget https://github.com/karpathy/llama2.c/raw/master/tokenizer.bin
+```
+
+```
+wget https://github.com/schuhandreas/embedllama-stm32h7a3/raw/main/weights/tok512.bin -O tokenizer260k.bin
+```
+

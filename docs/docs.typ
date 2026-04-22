@@ -492,15 +492,15 @@ integral_(0)^(infinity) t^(k-1) (cos(a t))/sinh(pi t) dif t &= integral_(0)^(inf
 &= integral_(0)^(infinity) t^(k-1) e^(-pi t) cos(a t)/(1 - e^(-2pi t)) dif t \
 &= integral_(0)^(infinity) t^(k-1) e^(-pi t) cos(a t) sum_(n >= 0) e^(-2pi n t) dif t \
 &= sum_(n >= 0) integral_(0)^(infinity) t^(k-1) Re(e^(i a t)) e^(-(2 n + 1) pi t) dif t \
-&= 1/2 Re(sum_(n >= 0) integral_(0)^(infinity) t^(k-1) e^((-pi(2 n + 1) + i a) t) dif t) \
-&= 1/2 Re(sum_(n >= 0) 1/(pi (2n + 1) - i a)^k integral_(0)^(infinity) z^(k-1) e^(-z) dif z) \
-&= Gamma(k)/2 Re(sum_(n >= 0) 1/((n + (1 - i a)/(2 pi)) 2 pi)^k) \
-&= Gamma(k)/(2 (2pi)^k) Re(sum_(n >= 0) 1/(n + (1 - i a)/(2 pi))^k) \
-&= Gamma(k)/(2 (2pi)^k) Re(sum_(n >= 0) 1/(n + 1/(2pi) - i a/(2 pi))^k) \
-&= Gamma(k)/(2 (2pi)^k) Re(zeta(k, 1/(2pi) - i a/(2pi))) \
+&= Re(sum_(n >= 0) integral_(0)^(infinity) t^(k-1) e^((-pi(2 n + 1) + i a) t) dif t) \
+&= Re(sum_(n >= 0) 1/(pi (2n + 1) - i a)^k integral_(0)^(infinity) z^(k-1) e^(-z) dif z) \
+&= Gamma(k) Re(sum_(n >= 0) 1/((n + 1/2 - (i a)/(2 pi)) 2 pi)^k) \
+&= Gamma(k)/(2pi)^k Re(sum_(n >= 0) 1/(n + 1/2 - (i a)/(2 pi))^k) \
+&= Gamma(k)/(2pi)^k Re(sum_(n >= 0) 1/(n + 1/(2pi) - i a/(2 pi))^k) \
+&= Gamma(k)/(2pi)^k Re(zeta(k, 1/2 - (i a)/(2pi))) \
 
 \
-integral_(0)^(infinity) t^(k-1) (sin(a t))/sinh(pi t) dif t &= Gamma(k)/(2 (2pi)^k) Im(zeta(k, 1/(2pi) - i a/(2pi))) \
+integral_(0)^(infinity) t^(k-1) (sin(a t))/sinh(pi t) dif t &= Gamma(k)/(2pi)^k Im(zeta(k, 1/2 - i a/(2pi))) \
 \
 
 sum_(n>=1) (-1)^n n^(k-1) 2^(n x) &= cases(
