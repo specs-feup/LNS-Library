@@ -1,7 +1,7 @@
 CXX      = g++
 CXXFLAGS = --std=c++17 -Wall -Werror -I./include
 
-SRC 	= src/spline.cpp
+SRC 	= src/main.cpp src/spline.cpp
 BUILD = build
 BIN 	= build/spline
 LNS 	= lns_tables

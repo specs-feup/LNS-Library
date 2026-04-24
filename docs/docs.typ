@@ -341,6 +341,81 @@ The subtraction table requires substantially more rows than the addition table,
 because the second derivative of $f^-$ diverges near $x = 0$,
 requiring dense sampling near the singularity.
 
+=== $f^+$ and $f^-$ domain ranges
+
+For an LNS type with precision $p$, the minimum value in absolute terms is $2^(-p)$.
+So, we want to find $x < 0$, such that $plus.minus 2^(-p) = log_2(1 plus.minus 2^x)$: 
+
+#math.equation(numbering: none, block: true)[
+$
+plus.minus 2^(-p) &= log_2(1 plus.minus 2^x) \
+2^(plus.minus 2^(-p)) &= 1 plus.minus 2^x \
+2^(plus.minus 2^(-p)) - 1 &= plus.minus 2^x \
+plus.minus (2^(plus.minus 2^(-p)) - 1) &= 2^x \
+x &= log_2(plus.minus (2^(plus.minus 2^(-p)) - 1))
+$
+]
+
+#figure(
+  table(
+    columns: 4,
+    align: center,
+    [Type], [Precision $p$ (bits)], [$x_"min"^+$], [$x_"min"^-$],
+    [LNS8 Q4.3],    [3],  [$-3.466$],  [$-3.591$],
+    [LNS16 Q8.7],   [7],  [$-7.525$],  [$-7.533$],
+    [LNS32 Q16.15], [15], [$-15.529$], [$-15.529$],
+    [LNS32 Q8.23],  [23], [$-23.529$], [$-23.529$],
+    [LNS64 Q33.30], [30], [$-30.529$], [$-30.529$],
+    [LNS64 Q23.40], [40], [$-40.529$], [$-40.529$],
+    [LNS64 Q11.52], [52], [$-52.000$], [$-53.000$],
+  ),
+  caption: [Effective domain lower bound $x_"min"^plus.minus = log_2(2^(plus.minus 2^(-p)) - 1)$ by format and precision],
+)
+
+=== FP to LNS and LNS to FP convertion functions 
+
+
+#math.equation(numbering: none, block: true)[
+$
+x_(f p) = (-1)^(S_x) dot (1 + m_x) dot 2^(e_x) \
+x_(l n s) = (-1)^(S_x) dot 2^(L_x) \
+\
+x_(f p) = x_(l n s) \
+(-1)^(S_x) dot (1 + m_x) dot 2^(e_x) = (-1)^(S_x) dot 2^(L_x) \
+(1 + m_x) dot 2^(e_x) = 2^(L_x) \
+log_2(1 + m_x) + e_x = L_x \
+$
+]
+
+\
+
+$
+L_x &= e_x + log_2(1 + m_x) \
+"float2lns"(m_x) &:= log_2(1 + m_x) \
+"lns2float"("lns_f"_x) &:= 2^("lns_f"_x) - 1 \
+$
+
+\
+
+#math.equation(numbering: none, block: true)[
+$
+dif^2/(dif x^2) "float2lns(x)" &= dif/(dif x)(1/ln(2) 1/(1 + x)) \
+&= -1/ln(2) 1/(1 + x)^2 \
+
+
+dif^2/(dif x^2) "lns2float"(x) &:= ln(2)^2 2^x \
+$
+]
+
+\
+
+$
+epsilon_("float2lns") &<= 1/8 1/ln(2) 1/(1 + x_(i - 1))^2 h_i^2 \
+epsilon_("lns2float") &<= 1/8 ln(2)^2 2^(x_i) h_i^2 \
+$
+
+#pagebreak()
+
 == Limitations at Higher Precision
 
 The linear spline approach works well for lns8 and lns16,
@@ -414,7 +489,7 @@ $
 $
 ]
 
-And so, we finnaly get an infinite series representation of $f^+$ and $f^-$.
+And so, we finally get an infinite series representation of $f^+$ and $f^-$.
 
 $
 log_2(1 plus.minus 2^x) = 1/ln(2)^2 sum_(n>=1) (minus.plus 1)^n/n 2^(n x), x < 0
@@ -450,16 +525,20 @@ $
 1 + 1/n &< 2^(-x/(k-1)) \
 1/n &< 2^(-x/(k-1)) - 1 \
 n &> 1/(2^(-x/(k-1)) - 1) \
-\
+$
+]
+
+#math.equation(numbering: none, block: true)[
+$
 |R_n| &< |a_(n+1)| \
 \
 lr(|sum_(n>=ceil(1/(2^(-x/(k-1)) - 1))) (minus 1)^n n^(k-1) 2^(n x)|) &< lr(|(ceil(1/(2^(-x/(k-1)) - 1))+1)^(k-1) 2^((1+1) x)|) \
-&= (ceil(1/(2^(-x/(k-1)) - 1))+1)^(k-1) 2^(2x) \
-&= (ceil(1/(1 - 2^(x/(k-1))) - 1)+1)^(k-1) 2^(2x) \
+&= (ceil(1/(2^(-x/(k-1)) - 1)) + 1)^(k-1) 2^(2x) \
+&= (ceil(2^(x/(k-1))/(1 - 2^(x/(k-1)))) + 1)^(k-1) 2^(2x) \
 $
 
 $
-ceil(1/(1-2^t) - 1) + 1 &= ceil(2^t/(1-2^t)) + 1 \
+ceil(2^t/(1-2^t)) + 1
 &<= 2^t/(1-2^t) + 2 \
 &= (2^t + 2 - 2 dot 2^t)/(1-2^t) \
 &= (2 - 2^t)/(1-2^t) \
@@ -467,9 +546,12 @@ ceil(1/(1-2^t) - 1) + 1 &= ceil(2^t/(1-2^t)) + 1 \
 $
 
 $
-x < 0 &-> x/(k-1) < 0\
-&-> t < 0\
+x < 0 &-> x/(k-1) < 0 -> t < 0\
 2(1 - 2^(t-1))/(1-2^t) &<= 1/(1-2^t)\
+$
+
+$
+(1/(1 - 2^(x/(k-1))))^(k - 1) &= sum_(n >= 0) 2^(x/(k-1))
 $
 
 \
@@ -478,6 +560,9 @@ $
 K &= lr(|sum_(n>=1)^(n = ceil(1/(1 - 2^(x/(k-1))) - 1) - 1) (-1)^n n^(k-1) 2^(n x)|)
 $
 ]
+
+/*
+#pagebreak()
 
 By the Abel-Plana formula:
 #math.equation(numbering: none, block: true)[
@@ -536,13 +621,16 @@ lr(|sum_(n=0) (-1)^n n^(k-1) 2^(n x)|) &<= lr(|integral_(0)^(infinity) t^(k-1) 1
 &<= 2 Gamma(k) pi^(-k) zeta(k) (1 - 2^(-k)) \
 $
 ]
+*/
 
 Therefore, the k-th derivative of the $f^+$ is bounded by:
 #math.equation(numbering: none, block: true)[
 $
-dif^k/(dif x^k) log_2(1 minus 2^x) &<= ln(2)^(k-2) (K + (1-2^(x/(k-1)))^(1-k) 2^(2x)) \
+dif^k/(dif x^k) log_2(1 plus 2^x) &<= ln(2)^(k-2) (K + (1 - 2^(x/(k-1)))^(1-k) 2^(2x)) \
 $
 ]
+
+#pagebreak()
 
 Following D'Alambert Criteria for $f^-$, as $lim_(n->infinity) a_(n+1)/a_n = L, a_n = 2^(n x)/n^(k+1)$:
 
@@ -565,7 +653,13 @@ $
 Therefore, the k-th derivative of the $f^-$ is bounded by:
 #math.equation(numbering: none, block: true)[
 $
-dif^k/(dif x^k) log_2(1 minus 2^x) &<= ln(2)^(k-2) 2^(2x + k - 1)/(1 - 2^x)\
+dif^k/(dif x^k) log_2(1 minus 2^x) &<= ln(2)^(k-2) 2^(2x + k - 1)/(1 - 2^x) <= ln(2)^(k-2) (K + (1 - 2^(x/(k-1)))^(1-k) 2^(2x)) \
+
+2^(2x + k - 1)/(1 - 2^x) &<= (1 - 2^(x/(k-1)))^(1 - k) 2^(2x) \
+&<=> 2/(1 - 2^x) <= 1/(1 - 2^(x/(k-1))) \
+&<=> 2 - 2 dot 2^(x/(k - 1)) <= 1 - 2^x \
+&<=> 2 dot 2^(x/(k-1)) - 2^x >= 1 \
+&<=> 2^x (2^(x (1/(k-1) - 1)) - 1) >= 2^(-1) \
 $
 ]
 
@@ -636,111 +730,65 @@ $
 p^- ~ Omega(log_2((n_i + 1) !) + (n_i + 1) log_2(h_i^(-1)) - 2x_i + log_2(1 - 2^(x_i))) \
 $
 
-=== $f^+$ and $f^-$ domain ranges
+#pagebreak()
 
-For an LNS type with precision $p$, the minimum value in absolute terms is $2^(-p)$.
-So, we want to find $x < 0$, such that $plus.minus 2^(-p) = log_2(1 plus.minus 2^x)$: 
-
-#math.equation(numbering: none, block: true)[
-$
-plus.minus 2^(-p) &= log_2(1 plus.minus 2^x) \
-2^(plus.minus 2^(-p)) &= 1 plus.minus 2^x \
-2^(plus.minus 2^(-p)) - 1 &= plus.minus 2^x \
-plus.minus (2^(plus.minus 2^(-p)) - 1) &= 2^x \
-x &= log_2(plus.minus (2^(plus.minus 2^(-p)) - 1))
-$
-]
-
-#figure(
-  table(
-    columns: 4,
-    align: center,
-    [Type], [Precision $p$ (bits)], [$x_"min"^+$], [$x_"min"^-$],
-    [LNS8 Q4.3],    [3],  [$-3.466$],  [$-3.591$],
-    [LNS16 Q8.7],   [7],  [$-7.525$],  [$-7.533$],
-    [LNS32 Q16.15], [15], [$-15.529$], [$-15.529$],
-    [LNS32 Q8.23],  [23], [$-23.529$], [$-23.529$],
-    [LNS64 Q33.30], [30], [$-30.529$], [$-30.529$],
-    [LNS64 Q23.40], [40], [$-40.529$], [$-40.529$],
-    [LNS64 Q11.52], [52], [$-52.000$], [$-53.000$],
-  ),
-  caption: [Effective domain lower bound $x_"min"^plus.minus = log_2(2^(plus.minus 2^(-p)) - 1)$ by format and precision],
-)
-
-=== FP to LNS and LNS to FP convertion functions 
-
+=== LNS-Float & Float-LNS Convertion Functions Aproximations
 
 #math.equation(numbering: none, block: true)[
 $
-x_(f p) = (-1)^(S_x) dot (1 + m_x) dot 2^(e_x) \
-x_(l n s) = (-1)^(S_x) dot 2^(L_x) \
-\
-x_(f p) = x_(l n s) \
-(-1)^(S_x) dot (1 + m_x) dot 2^(e_x) = (-1)^(S_x) dot 2^(L_x) \
-(1 + m_x) dot 2^(e_x) = 2^(L_x) \
-log_2(1 + m_x) + e_x = L_x \
-$
-]
-
-$
-L_x = e_x + log_2(1 + m_x) \
-$
-
-
-#math.equation(numbering: none, block: true)[
-$
-log_2(1 + x) &= - 1/ln(2) sum_(n >= 1) (-1)^n / n x^n, |x| < 1 \
-&= 1/ln(2) sum_(n = 1)^(k) (-1)^n x^n - 1/ln(2) sum_(n >= k + 1) (-1)^n / n x^n \
-$
-]
-
-By the Alternaning Series Estimation Theorem:
-
-$
-lr(|sum_(n >= k + 1) (-1)^n / n x^n|) < (-1)^k x^(k+2)/(k+2)
-$
-
-#math.equation(numbering: none, block: true)[
-$
-lr(|log_2(1 + x) - 1/ln(2) sum_(n = 1)^(k) (-1)^n/n x^n|) &< (|x^(k+2)|)/(ln(2)(k+2))  \
-$
-]
-
-For the largest $x$ value, $x = 1$, the error of the approximation is bounded by
-$1/(ln(2)(k + 2))$. \
-Therefore, to achieve a precision $p$:
-
-#math.equation(numbering: none, block: true)[
-$
-2^(-p) &<= 1/(ln(2)(k + 2)) \
--p &<= -log_2(ln(2)(k + 2)) \
-p &>= log_2(ln(2)) + log_2(k + 2) \
-$
-]
-
-The growth of the precision is really slow.
-
-#math.equation(numbering: none, block: true)[
-$
-log_2(1 + x) &= 1/ln(2) sum_(n >= 1) (-1)^n / n x^n, |x| < 1 \
+"float2lns"(x) := log_2(1 + x) &= 1/ln(2) sum_(n >= 1) (-1)^n / n x^n, |x| < 1 \
 dif^k/(dif x^k) log_2(1 + x) &= 1/ln(2) dif^k/(dif x^k) sum_(n >= 1) (-1)^n / n x^n \
-&= 1/ln(2) sum_(n >= k) (-1)^n / n x^(n - k) \
-&= 1/(ln(2)x^k) (ln(1 + x) - sum_(n >= 1)^(k - 1) (-1)^n / n x^n) \
-&= 1/(ln(2)x^k) (ln(1 + x) - sum_(n >= 1)^(k - 1) (-1)^n / n integral_0^(x) n t^(n-1) dif t) \
-&= 1/(ln(2)x^k) (ln(1 + x) - integral_0^(x) sum_(n >= 1)^(k - 1) (-1)^n / n n t^(n-1) dif t) \
-&= 1/(ln(2)x^k) (ln(1 + x) + integral_0^(x) sum_(n >= 1)^(k - 1) (- t)^(n-1) dif t) \
-&= 1/(ln(2)x^k) (ln(1 + x) + integral_0^(x) sum_(n >= 0)^(k - 1) (- t)^n dif t) \
-&= 1/(ln(2)x^k) (ln(1 + x) + integral_0^(x) (1 - (-t)^k)/(1 + t) dif t) \
-&= 1/(ln(2)x^k) (2ln(1 + x) - (-1)^k integral_0^(x) (t^k)/(1 + t) dif t) \
-&<= 1/(ln(2)x^k) (2ln(1 + x) - (-x)^k/k) \
-&= 2log_2(1 + x) - (-1)^k/k \
 \
-dif^k/(dif x^k) log_2(1 + x) &<= 2log_2(1 + x) + 1/k "if" k = 0 mod 2 "else" 0\
+dif^k/(dif x^k) log_2(1 + x) &= 1/ln(2) sum_(n >= 1) (-1)^n / n n!/(n - k)! x^(n - k) \
 \
-dif^k/(dif x^k) log_2(1 + x) &= 1/ln(2) sum_(n >= 0) (-1)^(n + k) / (n + k) x^k \
-lr(|dif^k/(dif x^k) log_2(1 + x)|) &<= lr(|1/ln(2) (-1)^(k + 1) / (k + 1) x^k|) \
+lr(|(-1)^(n+1) / (n + 1) (n + 1)!/(n + 1 - k)! x^(n + 1 - k)|) &< lr(|(-1)^n / n n!/(n - k)! x^(n - k)|) \
+1 / (n + 1) (n + 1)!/(n + 1 - k)! x^(n + 1 - k) &< 1 / n n!/(n - k)! x^(n + 1 - k) \
+n x &< (n + 1 - k) \
+x &< (n + 1 - k) / n \
+x &< 1 - (k - 1) / n \
+n &> (k - 1)/(1 - x) \
 $
 ]
+
+#math.equation(numbering: none, block: true)[
+$
+lr(|dif^k/(dif x^k) log_2(1 + x)|) &<=
+lr(|1/ln(2) sum_(n = 1)^(n = i) (-1)^n / n n!/(n - k)! x^(n - k)|) +
+lr(|1/ln(2) (-1)^(i + 1) / (i + 1) x^(i + 1)|), i = ceil((k - 1)/(1 - x)) \
+$
+]
+
+By the Alternating Series Test.
+
+#math.equation(numbering: none, block: true)[
+$
+epsilon_i &<= 1/(n_i+1)! 1/ln(2) 1/(n_i + 2) x^(n_i + 1) h_i^(n_i + 1)
+$
+]
+
+#math.equation(numbering: none, block: true)[
+$
+p &>= Omega(log_2((n_i + 1)!) + (n_i + 1)(log_2(h_i^(-1)) - log_2(x_i)) - x_i) \
+$
+]
+
+#math.equation(numbering: none, block: true)[
+$
+"lns2float"(x) &:= 2^x - 1, |x| < 1\
+\
+lr(|dif^k/(dif x^k)(2^x - 1)|) &= ln(2)^k 2^x \
+\
+epsilon_i &<= 1/(n_i + 1)! ln(2)^(n_i + 1) 2^(x_i) h_i^(n_i + 1)
+$
+]
+
+#math.equation(numbering: none, block: true)[
+$
+p &>= Omega(log_2((n_i + 1)!) + (n_i + 1)(log_2(h_i^(-1)) - log_2(ln(2))) - x_i) \
+$
+]
+
+#pagebreak()
 
 == Newton's Divided Differences
 
@@ -783,6 +831,7 @@ Newton's divided differences are numerically stable when using Horner's scheme,
 but the divided differences themselves can suffer from cancellation when computed in floating point for closely spaced points.
 For fixed-point arithmetic, careful scaling of the coefficients is needed to avoid overflow during evaluation.
 
+/*
 == Minimax Polynomial Approximation (Remez Algorithm)
 
 === Method
@@ -952,3 +1001,5 @@ As noted in previous work, conversion between LNS and integer/float formats has 
 The current library supports lns8, lns16 as templates parameterised by $\langle N, I, F \rangle$. Extending this to lns32 and lns64 requires ensuring that intermediate arithmetic (exponent differences, polynomial evaluation) does not overflow the available integer types. For lns64, the exponent field is 63 bits wide, requiring 128-bit intermediate arithmetic in software simulation.
 
 #bibliography("bibliography.bib", style: "chicago-author-date")
+*/
+

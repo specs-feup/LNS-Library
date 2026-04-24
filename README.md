@@ -62,9 +62,9 @@ lns8_read_tables("spline/lns_tables/xmb_8_q4_3.lns");
 lns16_read_tables("spline/lns_tables/xmb_16_q8_7.lns");
 
 lns16 a(1.5f), b(2.0f);
-float result  = (a * b).convert();    // exact in LNS
-float result2 = (a + b).convert();    // approximated via LUT
-float result3 = a.sqrt().convert();   // exact — just exp >>= 1
+float result  = (float)(a * b);  // exact in LNS
+float result2 = (float)(a + b);  // approximated via LUT
+float result3 = (float)a.sqrt(); // exact — just exp >>= 1
 
 lns_close();  // free spline table memory
 ```
