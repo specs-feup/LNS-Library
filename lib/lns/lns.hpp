@@ -74,7 +74,8 @@
 
 template<u8 n>
 struct lns {
-  uint_t<n> bits;
+  // uint_t<n> bits;
+  f32 bits;
 
   static constexpr u8 funct7 =
     n == 8  ? LNS8  :
@@ -125,6 +126,7 @@ struct lns {
     return bits == other.bits;
   }
 
+  /*
   inline bool operator< (const lns other) const {
     return (f32)*this <  (f32)other;
   }
@@ -140,10 +142,15 @@ struct lns {
   inline bool operator>=(const lns other) const {
     return (f32)*this >= (f32)other;
   }
+  * */
 
+  inline void operator=(const lns& other) {
+    store(&other);
+  }
+  
   inline lns& operator+=(const lns other) {
     *this = *this + other;
-    return *this;
+    return result;
   }
 
   inline lns& operator-=(const lns other) {

@@ -1,5 +1,6 @@
 CXX = g++
 DEBUG =
+OPT		=
 
 CXX_SYSINCLUDE ?= $(shell $(CXX) -v -x c++ /dev/null 2>&1 \
     | grep '^ /' | head -1 | xargs)
@@ -13,10 +14,12 @@ SRC_DIR   = src
 LIB_DIR   = lib
 PREFIX   ?= /usr/local
 
-CXXFLAGS  = -std=c++17 -Wall -Werror -g -O2 \
+CXXFLAGS  = -std=c++17 -Wall -Werror \
             -I./$(LIB_DIR)/lnssim \
-            -I./$(LIB_DIR)/bfloatsim \
-            $(DEBUG)
+            -I./$(LIB_DIR)/bfloatsim
+
+CXXFLAGS += $(DEBUG)
+CXXFLAGS += $(OPT)
 
 # ---------- sources ----------
 MAIN_SRC = $(SRC_DIR)/main.cpp

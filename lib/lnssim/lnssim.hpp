@@ -13,8 +13,9 @@
 
 #define F32_FRAC_U32_TO_FLOAT(frac) \
   (f64)frac / (f64)(1 << 23)
-#define F32_TO_LNS_FRAC(mantissa, precision) \
-  (uint_t<n>)(log2(1.0 + mantissa) * (f64)(1 << precision))
+#define F32_TO_LNS_FRAC(mantissa, n, precision) \
+  (uint_t<n>)(lns_f2l_compute(mantissa) >> (n - 1 - precision))
+  // (uint_t<n>)(log2(1.0 + mantissa) * (f64)(1 << precision))
 
 template<u8 n, u8 i, u8 f>
 struct lns {
@@ -46,8 +47,16 @@ struct lns {
     const u32       float_exp_frac = F32_FRAC(raw);
 
     // Calculating lns_frac := log2(1 + f32_mantissa)
-    const f64       float_mantissa = F32_FRAC_U32_TO_FLOAT(float_exp_frac);
-    const uint_t<n> lns_exp_frac   = F32_TO_LNS_FRAC(float_mantissa, f);
+    // const f64       float_mantissa = F32_FRAC_U32_TO_FLOAT(float_exp_frac);
+    
+    int_t<n> float_mantissa = 0;
+     if constexpr (n == 64) {
+      float_mantissa = float_exp_frac << 30;
+    } else {
+      float_mantissa = float_exp_frac >> (23 - (n - 1));
+    }
+
+    const uint_t<n> lns_exp_frac   = F32_TO_LNS_FRAC(float_mantissa, n, f);
 
     /*
      * LNS<N> QI-F
@@ -76,8 +85,17 @@ struct lns {
     const uint_t<n> f32_exp  = (exp() >> f) + 127;
     const uint_t<n> exp_frac = exp() & ((1 << f) - 1);
 
-    const f64 mantissa = pow(2.0, (f64)exp_frac / (f64)(1 << f)) - 1.0;
-    const u32 f32_frac = (u32)(mantissa * (f64)(1 << 23));
+    // const f64 mantissa = pow(2.0, (f64)exp_frac / (f64)(1 << f)) - 1.0;
+    // const u32 f32_frac = (u32)(mantissa * (f64)(1 << 23));
+
+    const int_t<n> mantissa = lns_l2f_compute(exp_frac << (n - 1 - f)); 
+
+    u32 f32_frac = 0;
+    if constexpr (n == 64) {
+      f32_frac = (u32)mantissa >> 30;
+    } else {
+      f32_frac = (u32)mantissa << (23 - (n - 1));
+    }
 
     const u32 f32_bits =
       (sign() << 31) |
@@ -185,6 +203,40 @@ struct lns {
     // a - b is mathematically equivalent to a + (-b)
     // This delegates all complex spline math and sign handling to operator+
     return *this + (-other);
+  }
+
+  inline int_t<n> lns_f2l_compute(const int_t<n> mantissa) const {
+    if constexpr      (n == 8)  
+      return lns8_lut_compute  (*lns8_lut_f2l,  mantissa, n - 1);
+    else if constexpr (n == 16) 
+      return lns16_lut_compute (*lns16_lut_f2l, mantissa, n - 1);
+    else if constexpr (n == 32) {
+      fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+      exit(0);
+      return 0;
+    }
+    else if constexpr (n == 64) {
+      fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+      exit(0);
+      return 0;
+    }
+  }
+
+  inline int_t<n> lns_l2f_compute(const int_t<n> lns_f) const {
+    if constexpr      (n == 8)  
+      return lns8_lut_compute  (*lns8_lut_l2f,  lns_f, n - 1);
+    else if constexpr (n == 16) 
+      return lns16_lut_compute (*lns16_lut_l2f, lns_f, n - 1);
+    else if constexpr (n == 32) {
+      fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+      exit(0);
+      return 0;
+    }
+    else if constexpr (n == 64) {
+      fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+      exit(0);
+      return 0;
+    }
   }
 
   inline int_t<n> lns_add_and_sub_compute(const bool use_add, const int_t<n> diff) const {

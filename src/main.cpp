@@ -167,6 +167,8 @@
  * ===========================================================================
  */
 
+#include <iostream>
+
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -760,105 +762,6 @@ static void print_band(
   printf(BLUE "══════════════════════════════════════════════════════════════════════════════════════════════════════════\n" RESET);
 }
 
-// ----------------------------------------------------------------------------
-// Summary table
-//   Compact view: one row per band, one column pair per op.
-//   mul/div/rt columns show avg_rel | max_rel.
-//   add/sub columns show avg_abs* | max_abs  (consistent with detail tables).
-//   Winner (lower average) is highlighted green per cell.
-// ----------------------------------------------------------------------------
-
-/*
-static void print_summary(
-  const char*         title,
-  const char*         band_labels[],
-  const format_stats* stats_a[],
-  const format_stats* stats_b[],
-  const char*         name_a,
-  const char*         name_b,
-  u32                 n_bands
-) {
-  // op labels — add/sub marked * to indicate avg_abs is shown, not avg_rel
-  const char* ops[5] = { "rt", "mul", "div", "add*", "sub*" };
-
-  // Column widths: "avg  max" per format per op
-  // Each cell: 6-char scientific + space = 7, two per format = 14, gap = 2
-  printf("\n");
-  printf(BLUE "════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n" RESET);
-  printf(BLUE "  SUMMARY: %s\n" RESET, title);
-  printf(BLUE "  Columns: avg_rel | max_rel  for rt/mul/div\n" RESET);
-  printf(BLUE "           avg_abs*| max_abs  for add/sub  (see top comment)\n" RESET);
-  printf(BLUE "  Green = lower average (winner per cell)\n" RESET);
-  printf(BLUE "════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n" RESET);
-
-  // Header row 1: op names spanning two sub-columns each
-  printf("%-12s", "band");
-  for (u32 op = 0; op < 5; op++)
-    printf("  %-29s", ops[op]);
-  printf("\n");
-
-  // Header row 2: format names
-  printf("%-12s", "");
-  for (u32 op = 0; op < 5; op++)
-    printf("  %-20s %-20s", name_a, name_b);
-  printf("\n");
-
-  // Header row 3: avg / max sub-labels
-  printf("%-12s", "");
-  for (u32 op = 0; op < 5; op++)
-    printf("  %-7s%-7s %-7s%-7s", "avg", "max", "avg", "max");
-  printf("\n");
-
-  // Separator
-  printf("%-12s", "");
-  for (u32 op = 0; op < 5; op++)
-    printf("  %s %s", "--------------", "--------------");
-  printf("\n");
-
-  auto get_op = [](const format_stats* fs, u32 op) -> const op_stats* {
-    switch (op) {
-      case 0: return &fs->rt;
-      case 1: return &fs->mul;
-      case 2: return &fs->div_;
-      case 3: return &fs->add_;
-      case 4: return &fs->sub_;
-    }
-    return &fs->rt;
-  };
-
-  for (u32 b = 0; b < n_bands; b++) {
-    printf("%-12s", band_labels[b]);
-    for (u32 op = 0; op < 5; op++) {
-      const op_stats* sa = get_op(stats_a[b], op);
-      const op_stats* sb = get_op(stats_b[b], op);
-
-      // add/sub: report avg_abs and max_abs; others: avg_rel and max_rel
-      bool abs_mode = (op >= 3);
-      f32 va_avg = abs_mode ? sa->avg_abs() : sa->avg_rel();
-      f32 vb_avg = abs_mode ? sb->avg_abs() : sb->avg_rel();
-      f32 va_max = abs_mode ? sa->max_abs_err : sa->max_rel_err;
-      f32 vb_max = abs_mode ? sb->max_abs_err : sb->max_rel_err;
-
-      const char* ga = (va_avg <= vb_avg) ? GREEN : "";
-      const char* gb = (vb_avg <  va_avg) ? GREEN : "";
-      const char* ra = ga[0] ? RESET : "";
-      const char* rb = gb[0] ? RESET : "";
-
-      printf("  %s%-6.2e%s %-6.2e  %s%-6.2e%s %-6.2e",
-        ga, (f64)va_avg, ra, (f64)va_max,
-        gb, (f64)vb_avg, rb, (f64)vb_max);
-    }
-    printf("\n");
-  }
-
-  printf(BLUE "════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n" RESET);
-}
-*/
-
-// ----------------------------------------------------------------------------
-// Main
-// ----------------------------------------------------------------------------
-
 struct band { f32 lo, hi; const char* label; };
 
 // 8-bit formats: capped at |x| = 4 (see format definitions)
@@ -888,8 +791,8 @@ i32 main(const i32 argc, const char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  lns8_read_tables (argv[1]);
-  lns16_read_tables(argv[2]);
+  lns8_read_tables  (argv[1]);
+  lns16_read_tables (argv[2]);
 
   u32 n = (argc > 3) ? (u32)atoi(argv[3]) : 100000;
 
@@ -925,31 +828,11 @@ i32 main(const i32 argc, const char* argv[]) {
     print_band(BANDS16[b].label, stats16_lns[b], stats16_bf[b], "lns16", "bf16");
   }
 
-  // ── Summary tables ────────────────────────────────────────────────────────
-
-  // const char*         labels8   [N_BANDS8];
-  // const format_stats* ptrs8_lns [N_BANDS8];
-  // const format_stats* ptrs8_bf  [N_BANDS8];
-  // for (u32 b = 0; b < N_BANDS8; b++) {
-    // labels8   [b] = BANDS8[b].label;
-    // ptrs8_lns [b] = &stats8_lns[b];
-    // ptrs8_bf  [b] = &stats8_bf [b];
-  // }
-
-  // const char*         labels16   [N_BANDS16];
-  // const format_stats* ptrs16_lns [N_BANDS16];
-  // const format_stats* ptrs16_bf  [N_BANDS16];
-  // for (u32 b = 0; b < N_BANDS16; b++) {
-    // labels16   [b] = BANDS16[b].label;
-    // ptrs16_lns [b] = &stats16_lns[b];
-    // ptrs16_bf  [b] = &stats16_bf [b];
-  // }
-
-  // print_summary("lns8 vs bf8 (E4M3)",
-    // labels8,  ptrs8_lns,  ptrs8_bf,  "lns8",  "bf8",  N_BANDS8);
-
-  // print_summary("lns16 vs bf16",
-    // labels16, ptrs16_lns, ptrs16_bf, "lns16", "bf16", N_BANDS16);
+  std::cout << 0.2f << " roundtrip: " << (f32)lns16(0.2f) << std::endl;  
+  std::cout << 0.1f << " roundtrip: " << (f32)lns16(0.1f) << std::endl;  
+  std::cout << 0.01f << " roundtrip: " << (f32)lns16(0.01f) << std::endl;  
+  std::cout << 2.f << " roundtrip: " << (f32)lns16(2.f) << std::endl;  
+  std::cout << 2.3f << " roundtrip: " << (f32)lns16(2.3f) << std::endl;  
 
   lns_close();
   return 0;

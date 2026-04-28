@@ -20,8 +20,8 @@ typedef struct spline_point {
   i16 x, y, m, b;
 } SplinePoint;
 
-void greedy_spline_float2lns (std::vector<SplinePoint>& table, const size_t s_table, const i16 precision);
-void greedy_spline_lns2float (std::vector<SplinePoint>& table, const size_t s_table, const i16 precision);
+void greedy_spline_float2lns (std::vector<SplinePoint>& table, const size_t s_table);
+void greedy_spline_lns2float (std::vector<SplinePoint>& table, const size_t s_table);
 void greedy_spline_add_func  (std::vector<SplinePoint>& table, const size_t s_table, const i16 precision);
 void greedy_spline_sub_func  (std::vector<SplinePoint>& table, const size_t s_table, const i16 precision);
 
@@ -32,12 +32,8 @@ void test_sub_table_sizes       (const size_t s_max, const bool xf_mode, const b
 
 void write_tables_binary(
   const std::vector<SplinePoint>& spline_plus, const std::vector<SplinePoint>& spline_minus,
+  const std::vector<SplinePoint>& spline_f2l,  const std::vector<SplinePoint>& spline_l2f,
   const bool lns16, const bool xf, const i16 int_digits, const i16 precision
-);
-
-void write_convert_table_binary(
-  const std::vector<SplinePoint>& spline,
-  const bool lns16, const bool f2l, const i16 int_digits, const i16 precision
 );
 
 i16 calculate_xmb (const std::vector<SplinePoint>& table, const i16 x, const i16 s_table, const i16 precision);

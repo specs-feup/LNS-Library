@@ -45,8 +45,8 @@ struct spline_xmb {
   #error "Must define either SPLINE_XF or SPLINE_XMB"
 #endif
 
-LNS8_SPLINE_T  *lns8_lut_add,  *lns8_lut_sub;
-LNS16_SPLINE_T *lns16_lut_add, *lns16_lut_sub;
+LNS8_SPLINE_T  *lns8_lut_add,  *lns8_lut_sub,  *lns8_lut_f2l,  *lns8_lut_l2f;
+LNS16_SPLINE_T *lns16_lut_add, *lns16_lut_sub, *lns16_lut_f2l, *lns16_lut_l2f;
 
 i8   lns8_read_tables   (const char* filename);
 i8   lns16_read_tables  (const char* filename);
@@ -89,9 +89,6 @@ i8 lns8_lut_compute(const spline_xf<8>& lut, const i8 diff, const u8 precision) 
     interval++
   );
 
-  if (interval == 0)
-    return 0;
-
   const i8 
     h_i = lut.point[interval].x - lut.point[interval - 1].x,
     h_i_log2 = log2_int(h_i);
@@ -120,9 +117,6 @@ i16 lns16_lut_compute(const spline_xf<16>& lut, const i16 diff, const u8 precisi
     interval++
   );
   
-  if (interval == 0)
-    return 0;
-
   const i16 
     h_i = lut.point[interval].x - lut.point[interval - 1].x,
     h_i_log2 = log2_int(h_i);
@@ -184,8 +178,6 @@ static u8 log2_int(i64 n) {
     return 21;
   else if (n <= 0x00400000)
     return 22;
-  else if (n <= 0x00400000)
-    return 22;
   else if (n <= 0x00800000)
     return 23;
   else if (n <= 0x01000000)
@@ -204,82 +196,6 @@ static u8 log2_int(i64 n) {
     return 30;
   else
     return 31;
-}
-
-i8 lns8_read_tables(const char* filename) {
-  if (filename == nullptr) {
-    fprintf(stderr, "[ERROR]: filename is a nullptr in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
-    return -1;
-  }
-
-  FILE* file = fopen(filename, "rb");
-  if (file == nullptr) {
-    fprintf(stderr, "[ERROR]: could not open %s in %s at %u in %s", filename, __FUNCTION__, __LINE__, __FILE__);
-    return -2;
-  }
-
-  u64 result = 0;
-
-  u32 s_add, s_sub;
-
-  result += fread(&s_add, sizeof(u32), 1, file);
-  result += fread(&s_sub, sizeof(u32), 1, file);
-
-  lns8_lut_add = (spline_xf<8>*)malloc(sizeof(spline_xf<8>) + s_add * sizeof(lns8_lut_add->point[0]));
-  lns8_lut_sub = (spline_xf<8>*)malloc(sizeof(spline_xf<8>) + s_sub * sizeof(lns8_lut_sub->point[0]));
-
-  lns8_lut_add->s_spline = s_add;
-  lns8_lut_sub->s_spline = s_sub;
-
-  result += fread(lns8_lut_add->point, sizeof(lns8_lut_add->point[0]), s_add, file);
-  result += fread(lns8_lut_sub->point, sizeof(lns8_lut_sub->point[0]), s_sub, file);
-
-  fclose(file);
-
-  if (result != 2 + lns8_lut_add->s_spline + lns8_lut_sub->s_spline) {
-    fprintf(stderr, "[ERROR]: incomplete read in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
-    return -3;
-  }
-
-  return 0;
-}
-
-i8 lns16_read_tables(const char* filename) {
-  if (filename == nullptr) {
-    fprintf(stderr, "[ERROR]: filename is a nullptr in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
-    return -1;
-  }
-
-  FILE* file = fopen(filename, "rb");
-  if (file == nullptr) {
-    fprintf(stderr, "[ERROR]: could not open %s in %s at %u in %s", filename, __FUNCTION__, __LINE__, __FILE__);
-    return -2;
-  }
-
-  u64 result = 0;
-
-  u32 s_add, s_sub;
-
-  result += fread(&s_add, sizeof(u32), 1, file);
-  result += fread(&s_sub, sizeof(u32), 1, file);
-
-  lns16_lut_add = (spline_xf<16>*)malloc(sizeof(spline_xf<16>) + s_add * sizeof(lns16_lut_add->point[0]));
-  lns16_lut_sub = (spline_xf<16>*)malloc(sizeof(spline_xf<16>) + s_sub * sizeof(lns16_lut_sub->point[0]));
-
-  lns16_lut_add->s_spline = s_add;
-  lns16_lut_sub->s_spline = s_sub;
-
-  result += fread(lns16_lut_add->point, sizeof(lns16_lut_add->point[0]), s_add, file);
-  result += fread(lns16_lut_sub->point, sizeof(lns16_lut_sub->point[0]), s_sub, file);
-
-  fclose(file);
-
-  if (result != 2 + lns16_lut_add->s_spline + lns16_lut_sub->s_spline) {
-    fprintf(stderr, "[ERROR]: incomplete read in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
-    return -3;
-  }
-
-  return 0;
 }
 
 #elif defined(SPLINE_XMB)
@@ -322,39 +238,58 @@ i16 lns16_lut_compute(const spline_xmb<16>& lut, const i16 diff, const u8 precis
   const i32 tmp = lut.point[interval].m * x;
   return (i16)(tmp >> precision) + lut.point[interval].b;
 }
+#endif
 
 i8 lns8_read_tables(const char* filename) {
   if (filename == nullptr) {
-    fprintf(stderr, "[ERROR]: filename is a nullptr in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
+    fprintf(stderr, "[ERROR]: filename is a nullptr in %s at %u in %s\n", __FUNCTION__, __LINE__, __FILE__);
+    exit(1);
     return -1;
   }
 
   FILE* file = fopen(filename, "rb");
   if (file == nullptr) {
-    fprintf(stderr, "[ERROR]: could not open %s in %s at %u in %s", filename, __FUNCTION__, __LINE__, __FILE__);
+    fprintf(stderr, "[ERROR]: could not open %s in %s at %u in %s\n", filename, __FUNCTION__, __LINE__, __FILE__);
+    exit(1);
     return -2;
   }
 
   u64 result = 0;
 
-  u32 s_add, s_sub;
+  u32
+    s_add, s_sub,
+    s_f2l, s_l2f;
 
   result += fread(&s_add, sizeof(u32), 1, file);
   result += fread(&s_sub, sizeof(u32), 1, file);
+  result += fread(&s_f2l, sizeof(u32), 1, file);
+  result += fread(&s_l2f, sizeof(u32), 1, file);
 
-  lns8_lut_add = (spline_xmb<8>*)malloc(sizeof(spline_xmb<8>) + s_add * sizeof(lns8_lut_add->point[0]));
-  lns8_lut_sub = (spline_xmb<8>*)malloc(sizeof(spline_xmb<8>) + s_sub * sizeof(lns8_lut_sub->point[0]));
+  lns8_lut_add = (spline_xf<8>*)malloc(sizeof(spline_xf<8>) + s_add * sizeof(lns8_lut_add->point[0]));
+  lns8_lut_sub = (spline_xf<8>*)malloc(sizeof(spline_xf<8>) + s_sub * sizeof(lns8_lut_sub->point[0]));
+  lns8_lut_f2l = (spline_xf<8>*)malloc(sizeof(spline_xf<8>) + s_f2l * sizeof(lns8_lut_f2l->point[0]));
+  lns8_lut_l2f = (spline_xf<8>*)malloc(sizeof(spline_xf<8>) + s_l2f * sizeof(lns8_lut_l2f->point[0]));
 
   lns8_lut_add->s_spline = s_add;
   lns8_lut_sub->s_spline = s_sub;
+  lns8_lut_f2l->s_spline = s_f2l;
+  lns8_lut_l2f->s_spline = s_l2f;
 
   result += fread(lns8_lut_add->point, sizeof(lns8_lut_add->point[0]), s_add, file);
   result += fread(lns8_lut_sub->point, sizeof(lns8_lut_sub->point[0]), s_sub, file);
+  result += fread(lns8_lut_f2l->point, sizeof(lns8_lut_f2l->point[0]), s_f2l, file);
+  result += fread(lns8_lut_l2f->point, sizeof(lns8_lut_l2f->point[0]), s_l2f, file);
 
   fclose(file);
 
-  if (result != 2 + lns8_lut_add->s_spline + lns8_lut_sub->s_spline) {
-    fprintf(stderr, "[ERROR]: incomplete read in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
+  const u64 s_file =
+    4 +
+    lns8_lut_add->s_spline + lns8_lut_sub->s_spline +
+    lns8_lut_f2l->s_spline + lns8_lut_l2f->s_spline;
+
+  if (result != s_file) {
+    fprintf(stderr, "[ERROR]: wrong read in %s at %u in %s\n", __FUNCTION__, __LINE__, __FILE__);
+    exit(1);
     return -3;
   }
 
@@ -363,48 +298,69 @@ i8 lns8_read_tables(const char* filename) {
 
 i8 lns16_read_tables(const char* filename) {
   if (filename == nullptr) {
-    fprintf(stderr, "[ERROR]: filename is a nullptr in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
+    fprintf(stderr, "[ERROR]: filename is a nullptr in %s at %u in %s\n", __FUNCTION__, __LINE__, __FILE__);
+    exit(1);
     return -1;
   }
 
   FILE* file = fopen(filename, "rb");
   if (file == nullptr) {
-    fprintf(stderr, "[ERROR]: could not open %s in %s at %u in %s", filename, __FUNCTION__, __LINE__, __FILE__);
+    fprintf(stderr, "[ERROR]: could not open %s in %s at %u in %s\n", filename, __FUNCTION__, __LINE__, __FILE__);
+    exit(1);
     return -2;
   }
 
   u64 result = 0;
 
-  u32 s_add, s_sub;
+  u32
+    s_add, s_sub,
+    s_f2l, s_l2f;
 
   result += fread(&s_add, sizeof(u32), 1, file);
   result += fread(&s_sub, sizeof(u32), 1, file);
+  result += fread(&s_f2l, sizeof(u32), 1, file);
+  result += fread(&s_l2f, sizeof(u32), 1, file);
 
-  lns16_lut_add = (spline_xmb<16>*)malloc(sizeof(spline_xmb<16>) + s_add * sizeof(lns16_lut_add->point[0]));
-  lns16_lut_sub = (spline_xmb<16>*)malloc(sizeof(spline_xmb<16>) + s_sub * sizeof(lns16_lut_sub->point[0]));
+  lns16_lut_add = (spline_xf<16>*)malloc(sizeof(spline_xf<16>) + s_add * sizeof(lns16_lut_add->point[0]));
+  lns16_lut_sub = (spline_xf<16>*)malloc(sizeof(spline_xf<16>) + s_sub * sizeof(lns16_lut_sub->point[0]));
+  lns16_lut_f2l = (spline_xf<16>*)malloc(sizeof(spline_xf<16>) + s_f2l * sizeof(lns16_lut_f2l->point[0]));
+  lns16_lut_l2f = (spline_xf<16>*)malloc(sizeof(spline_xf<16>) + s_l2f * sizeof(lns16_lut_l2f->point[0]));
 
   lns16_lut_add->s_spline = s_add;
   lns16_lut_sub->s_spline = s_sub;
+  lns16_lut_f2l->s_spline = s_f2l;
+  lns16_lut_l2f->s_spline = s_l2f;
 
   result += fread(lns16_lut_add->point, sizeof(lns16_lut_add->point[0]), s_add, file);
   result += fread(lns16_lut_sub->point, sizeof(lns16_lut_sub->point[0]), s_sub, file);
+  result += fread(lns16_lut_f2l->point, sizeof(lns16_lut_f2l->point[0]), s_f2l, file);
+  result += fread(lns16_lut_l2f->point, sizeof(lns16_lut_l2f->point[0]), s_l2f, file);
 
   fclose(file);
 
-  if (result != 2 + lns16_lut_add->s_spline + lns16_lut_sub->s_spline) {
-    fprintf(stderr, "[ERROR]: incomplete read in %s at %u in %s", __FUNCTION__, __LINE__, __FILE__);
+  const u64 s_file =
+    4 +
+    lns16_lut_add->s_spline + lns16_lut_sub->s_spline +
+    lns16_lut_f2l->s_spline + lns16_lut_l2f->s_spline;
+
+  if (result != s_file) {
+    fprintf(stderr, "[ERROR]: wrong read in %s at %u in %s\n", __FUNCTION__, __LINE__, __FILE__);
+    exit(1);
     return -3;
   }
+
   return 0;
 }
-
-#endif
 
 void lns_close() {
   free(lns8_lut_add);
   free(lns8_lut_sub);
   free(lns16_lut_add);
   free(lns16_lut_sub);
+  free(lns8_lut_f2l);
+  free(lns8_lut_l2f);
+  free(lns16_lut_f2l);
+  free(lns16_lut_l2f);
 }
 
 #endif // !__LNS_LUTS_H__
