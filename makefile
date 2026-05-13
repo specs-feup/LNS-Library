@@ -21,15 +21,36 @@ CXXFLAGS  = -std=c++17 -Wall -Werror \
 CXXFLAGS += $(DEBUG)
 CXXFLAGS += $(OPT)
 
+# ---------- RISC-V toolchain detection ----------
+RISCV64_TOOLCHAIN := $(shell which riscv64-unknown-elf-gcc 2>/dev/null)
+RISCV32_TOOLCHAIN := $(shell which riscv32-unknown-elf-gcc 2>/dev/null)
+
+ifeq ($(RISCV64_TOOLCHAIN),)
+    ifeq ($(RISCV32_TOOLCHAIN),)
+        RISCV_UNAVAILABLE := 1
+    else
+        RISCV_TOOLCHAIN_PREFIX := riscv32-unknown-elf
+        $(info Using riscv32 toolchain)
+    endif
+else
+    RISCV_TOOLCHAIN_PREFIX := riscv64-unknown-elf
+    $(info Using riscv64 toolchain)
+endif
+
+RISCV_GCC      := $(RISCV_TOOLCHAIN_PREFIX)-gcc
+RISCV_FLAGS    := -march=rv32imf_zicsr -mabi=ilp32 -nostartfiles -Ttext 0
+RISCV_CXXFLAGS := -std=c++17 -Wall -Werror -I./$(LIB_DIR)/lns -DRISCV
+
 # ---------- sources ----------
 MAIN_SRC = $(SRC_DIR)/main.cpp
 MAIN_OBJ = $(BUILD_DIR)/main.o
 TARGET   = $(BUILD_DIR)/lns_test
 
-TINY_LNS16_SRC  = $(SRC_DIR)/tiny_lns16.cpp
-TINY_BF16_SRC   = $(SRC_DIR)/tiny_bf16.cpp
-CONV_BF16_SRC   = $(SRC_DIR)/convert_bf16.cpp
-CONV_LNS16_SRC  = $(SRC_DIR)/convert_lns16.cpp
+TINY_LNS16_SRC  			= $(SRC_DIR)/tiny_lns16.cpp
+TINY_BF16_SRC   			= $(SRC_DIR)/tiny_bf16.cpp
+TINY_LNS16_RISCPP_SRC = $(SRC_DIR)/tiny_lns16_riscpp.cpp
+CONV_BF16_SRC   			= $(SRC_DIR)/convert_bf16.cpp
+CONV_LNS16_SRC  			= $(SRC_DIR)/convert_lns16.cpp
 
 # ---------- headers ----------
 HDR_LNS       = $(LIB_DIR)/lns/lns.hpp
@@ -79,6 +100,19 @@ tiny_bf16: $(BUILD_DIR)
 	@echo "$(BLUE)Compiling tiny with bf16...$(RESET)"
 	$(CXX) $(CXXFLAGS) -fopenmp $(TINY_BF16_SRC) -o $(BUILD_DIR)/tiny_bf16 -lm
 	@echo "$(GREEN)Build complete → $(BUILD_DIR)/tiny_bf16$(RESET)"
+
+tiny_riscpp: $(BUILD_DIR)
+ifdef RISCV_UNAVAILABLE
+	$(error "Neither riscv64-unknown-elf-gcc nor riscv32-unknown-elf-gcc is installed!")
+endif
+	@echo "$(BLUE)Compiling tiny_riscpp and generating assembly...$(RESET)"
+	# Generate the assembly file (.s)
+	$(RISCV_GCC) $(RISCV_FLAGS) $(RISCV_CXXFLAGS) -DSPLINE_XF -S \
+		$(TINY_LNS16_RISCPP_SRC) -o $(BUILD_DIR)/tiny_riscpp.s
+	# Compile the actual binary
+	$(RISCV_GCC) $(RISCV_FLAGS) $(RISCV_CXXFLAGS) -DSPLINE_XF \
+		$(TINY_LNS16_RISCPP_SRC) -o $(BUILD_DIR)/tiny_riscpp -lm
+	@echo "$(GREEN)Build complete → $(BUILD_DIR)/tiny_riscpp and $(BUILD_DIR)/tiny_riscpp.s$(RESET)"
 
 # ---------- converters ----------
 convert_bf16: $(BUILD_DIR)

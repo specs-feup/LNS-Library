@@ -6,16 +6,9 @@
 #include <ctime>
 #include <cmath>
 #include <cstring>
-#include <fcntl.h>
 
 #include "lns.hpp"
 
-#if defined _WIN32
-  #include "win.h"
-#else
-  #include <unistd.h>
-  #include <sys/mman.h>
-#endif
 // ----------------------------------------------------------------------------
 // Transformer model
 
@@ -68,13 +61,12 @@ typedef struct {
 } RunState;
 
 typedef struct {
-  Config config; // the hyperparameters of the architecture (the blueprint)
-  TransformerWeights weights; // the weights of the model
-  RunState state; // buffers for the "wave" of activations in the forward pass
-  // some more state needed to properly clean up the memory mapping (sigh)
-  i32 fd; // file descriptor for memory mapping
-  lns16* data; // memory mapped data pointer
-  ssize_t file_size; // size of the checkpoint file in bytes
+  Config config;
+  TransformerWeights weights;
+  RunState state;
+  i32 fd;
+  lns16* data;
+  ssize_t file_size;
 } Transformer;
 
 void malloc_run_state(RunState* s, Config* p) {
@@ -159,48 +151,41 @@ void read_checkpoint(
     exit(EXIT_FAILURE);
   }
 
-  // read in the config header
   if (fread(config, sizeof(Config), 1, file) != 1)
     exit(EXIT_FAILURE);
-  // negative vocab size is hacky way of signaling unshared weights. bit yikes.
-  
+
   i32 shared_weights = config->vocab_size > 0 ? 1 : 0;
   config->vocab_size = abs(config->vocab_size);
-  // figure out the file size
 
-  fseek(file, 0, SEEK_END); // move file pointer to end of file
-  *file_size = ftell(file); // get the file size, in bytes
+  // bare-metal: read entire file into malloc'd buffer
+  fseek(file, 0, SEEK_END);
+  *file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  *data = (lns16*)malloc(*file_size);
+  if (!*data) {
+    fprintf(stderr, "malloc failed!\n");
+    exit(EXIT_FAILURE);
+  }
+
+  if (fread(*data, 1, *file_size, file) != (size_t)*file_size) {
+    fprintf(stderr, "fread failed!\n");
+    exit(EXIT_FAILURE);
+  }
   fclose(file);
 
-  // memory map the Transformer weights i32o the data pointer
-  *fd = open(checkpoint, O_RDONLY); // open in read only mode
-  if (*fd == -1) {
-    fprintf(stderr, "open failed!\n");
-    exit(EXIT_FAILURE);
-  }
-  *data = (lns16*)mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
-  if (*data == MAP_FAILED) {
-    fprintf(stderr, "mmap failed!\n");
-    exit(EXIT_FAILURE);
-  }
   lns16* weights_ptr = *data + sizeof(Config) / sizeof(lns16);
   memory_map_weights(weights, config, weights_ptr, shared_weights);
 }
 
 void build_transformer(Transformer *t, char* checkpoint_path) {
-  // read in the Config and the Weights from the checkpoint
-  read_checkpoint(checkpoint_path, &t->config, &t->weights, &t->fd, &t->data, &t->file_size);
-  // allocate the RunState buffers
+  ssize_t file_size;
+  read_checkpoint(checkpoint_path, &t->config, &t->weights, nullptr, &t->data, &file_size);
   malloc_run_state(&t->state, &t->config);
 }
 
 void free_transformer(Transformer* t) {
-  // close the memory mapping
-  if (t->data != MAP_FAILED)
-    munmap(t->data, t->file_size);
-  if (t->fd != -1)
-    close(t->fd);
-  // free the RunState buffers
+  free(t->data);
   free_run_state(&t->state);
 }
 
@@ -211,6 +196,7 @@ void rmsnorm(lns16* o, lns16* x, lns16* weight, i32 size) {
   // calculate sum of squares
 
   lns16 ss = lns16(0.0f);
+
   /*
   for (i32 j = 0; j < size; j++)
     ss += x[j] * x[j];
@@ -224,7 +210,7 @@ void rmsnorm(lns16* o, lns16* x, lns16* weight, i32 size) {
 
   ss /= lns16(size);
   ss += lns16(1e-5f);
-  ss = lns16(1.0f / (f32)ss.sqrt());
+  ss = lns16(1.0f) / ss.sqrt();
 
   // normalize and scale
   for (i32 j = 0; j < size; j++)
@@ -255,7 +241,7 @@ void matmul(lns16* xout, lns16* x, lns16* w, i32 n, i32 d) {
   // W (d,n) @ x (n,) -> xout (d,)
   // by far the most amount of time is spent inside this little function
   i32 i;
-  #pragma omp parallel for private(i)
+  // #pragma omp parallel for private(i)
   for (i = 0; i < d; i++) {
     /* No f32 for accumulated sum, shows worst results
     lns16 val = 0.0f;
@@ -327,7 +313,7 @@ lns16* forward(Transformer* transformer, i32 token, i32 pos) {
 
     // multihead attention. iterate over all heads
     i32 h;
-    #pragma omp parallel for private(h)
+    // #pragma omp parallel for private(h)
     for (h = 0; h < p->n_heads; h++) {
       // get the query vector for this head
       lns16* q = s->q + h * head_size;
@@ -427,7 +413,7 @@ typedef struct {
   u8 byte_pieces[512]; // stores all single-byte strings
 } Tokenizer;
 
-i32 compare_tokens(const void *a, const void *b) {
+int compare_tokens(const void *a, const void *b) {
   return strcmp(((TokenIndex*)a)->str, ((TokenIndex*)b)->str);
 }
 
@@ -650,13 +636,21 @@ typedef struct {
   i32 index;
 } ProbIndex; // struct used when sorting probabilities during top-p sampling
 
-typedef struct {
+
+struct Sampler {
   i32 vocab_size;
-  ProbIndex* probindex; // buffer used in top-p sampling
+  ProbIndex* probindex;
   lns16 temperature;
   lns16 topp;
   u64 rng_state;
-} Sampler;
+
+  Sampler(f32 temp = 1.0f)
+    : vocab_size(0),
+      probindex(nullptr),
+      temperature(lns16(temp)),
+      topp(lns16(0.9f)),
+      rng_state(0) {}
+};
 
 i32 sample_argmax(lns16* probabilities, i32 n) {
   // return the index that has the highest probability
@@ -686,7 +680,7 @@ i32 sample_mult(lns16* probabilities, i32 n, lns16 coin) {
   return n - 1; // in case of rounding errors
 }
 
-i32 compare(const void* a, const void* b) {
+int compare(const void* a, const void* b) {
   ProbIndex* a_ = (ProbIndex*) a;
   ProbIndex* b_ = (ProbIndex*) b;
   
@@ -797,11 +791,13 @@ i32 sample(Sampler* sampler, lns16* logits) {
 // ----------------------------------------------------------------------------
 // utilities: time
 
-long time_in_ms() {
-  // return time in milliseconds, for benchmarking the model speed
-  struct timespec time;
-  clock_gettime(CLOCK_REALTIME, &time);
-  return time.tv_sec * 1000 + time.tv_nsec / 1000000;
+#ifndef LNS_CLOCK_HZ
+#define LNS_CLOCK_HZ 50000000  // default 50 MHz — override with -DLNS_CLOCK_HZ=<freq>
+#endif
+u32 time_in_ms() {
+  u32 cycles;
+  asm volatile ("csrr %0, mcycle" : "=r"(cycles));
+  return cycles / (LNS_CLOCK_HZ / 1000);  // divide first to avoid overflow
 }
 
 // ----------------------------------------------------------------------------
@@ -968,10 +964,6 @@ void chat(
 }
 
 
-// ----------------------------------------------------------------------------
-// CLI, include only if not testing
-#ifndef TESTING
-
 void error_usage() {
   fprintf(stderr, "Usage:   run <checkpoint> [options]\n");
   fprintf(stderr, "Example: run model.bin -n 256 -i \"Once upon a time\"\n");
@@ -987,9 +979,7 @@ void error_usage() {
   exit(EXIT_FAILURE);
 }
 
-i32 main(i32 argc, char *argv[]) {
-  lns16_read_tables("spline/lns_tables/xf_16_q8_7.lns");
-
+int main(int argc, char *argv[]) {
   // default parameters
   char *checkpoint_path = NULL;  // e.g. out/model.bin
   const char *tokenizer_path = "tokenizer.bin";
@@ -1054,7 +1044,7 @@ i32 main(i32 argc, char *argv[]) {
   build_tokenizer(&tokenizer, tokenizer_path, transformer.config.vocab_size);
 
   // build the Sampler
-  Sampler sampler;
+  Sampler sampler(1.0f);
   build_sampler(&sampler, transformer.config.vocab_size, temperature, topp, rng_seed);
 
   // run!
@@ -1073,4 +1063,3 @@ i32 main(i32 argc, char *argv[]) {
   free_transformer(&transformer);
   return 0;
 }
-#endif
