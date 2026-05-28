@@ -990,7 +990,7 @@ void error_usage() {
 }
 
 i32 main(i32 argc, char *argv[]) {
-  lns16_read_tables("spline/lns_tables/xf_16_q8_7.lns");
+  lns16_read_tables("spline/lns_tables/lns16_q8_7_xf.lns");
 
   // default parameters
   char *checkpoint_path = NULL;  // e.g. out/model.bin

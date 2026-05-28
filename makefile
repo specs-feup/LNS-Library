@@ -53,12 +53,13 @@ CONV_BF16_SRC   			= $(SRC_DIR)/convert_bf16.cpp
 CONV_LNS16_SRC  			= $(SRC_DIR)/convert_lns16.cpp
 
 # ---------- headers ----------
-HDR_LNS       = $(LIB_DIR)/lns/lns.hpp
-HDR_LNSSIM    = $(LIB_DIR)/lnssim/lnssim.hpp
-HDR_LUTS      = $(LIB_DIR)/lnssim/lnsluts.hpp
-HDR_UTILS_LNS = $(LIB_DIR)/lnssim/utils.h
-HDR_BFLOATSIM = $(LIB_DIR)/bfloatsim/bfloatsim.hpp
-HDR_UTILS_BF  = $(LIB_DIR)/bfloatsim/utils.h
+HDR_LNS        = $(LIB_DIR)/lns/lns.hpp
+HDR_LNSSIM     = $(LIB_DIR)/lnssim/lnssim.hpp
+HDR_LNSSIM_INL = $(LIB_DIR)/lnssim/lnssim.inl
+HDR_LUTS       = $(LIB_DIR)/lnssim/lnsluts.hpp
+HDR_UTILS_LNS  = $(LIB_DIR)/lnssim/utils.h
+HDR_BFLOATSIM  = $(LIB_DIR)/bfloatsim/bfloatsim.hpp
+HDR_UTILS_BF   = $(LIB_DIR)/bfloatsim/utils.h
 
 RED   = \033[031m
 GREEN = \033[032m
@@ -139,12 +140,13 @@ test_xmb: xmb
 install:
 	@echo "$(BLUE)Installing headers to $(CXX_SYSINCLUDE)...$(RESET)"
 	install -d $(CXX_SYSINCLUDE)
-	install -m 644 $(HDR_LNS)       $(CXX_SYSINCLUDE)/lns.hpp
-	install -m 644 $(HDR_LNSSIM)    $(CXX_SYSINCLUDE)/lnssim.hpp
-	install -m 644 $(HDR_LUTS)      $(CXX_SYSINCLUDE)/lnsluts.hpp
-	install -m 644 $(HDR_UTILS_LNS) $(CXX_SYSINCLUDE)/lns_utils.h
-	install -m 644 $(HDR_BFLOATSIM) $(CXX_SYSINCLUDE)/bfloatsim.hpp
-	install -m 644 $(HDR_UTILS_BF)  $(CXX_SYSINCLUDE)/bfloat_utils.h
+	install -m 644 $(HDR_LNS)        $(CXX_SYSINCLUDE)/lns.hpp
+	install -m 644 $(HDR_LNSSIM)     $(CXX_SYSINCLUDE)/lnssim.hpp
+	install -m 644 $(HDR_LNSSIM_INL) $(CXX_SYSINCLUDE)/lnssim.inl
+	install -m 644 $(HDR_LUTS)       $(CXX_SYSINCLUDE)/lnsluts.hpp
+	install -m 644 $(HDR_UTILS_LNS)  $(CXX_SYSINCLUDE)/lns_utils.h
+	install -m 644 $(HDR_BFLOATSIM)  $(CXX_SYSINCLUDE)/bfloatsim.hpp
+	install -m 644 $(HDR_UTILS_BF)   $(CXX_SYSINCLUDE)/bfloat_utils.h
 	@echo "$(GREEN)Done$(RESET)"
 
 uninstall:

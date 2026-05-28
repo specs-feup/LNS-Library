@@ -193,7 +193,7 @@ wget https://huggingface.co/karpathy/tinyllamas/resolve/main/stories15M.bin
 ```
 
 ```
-wget https://huggingface.co/karpathy/tinyllamas/resolve/main/stories260K.bin
+wget https://huggingface.co/karpathy/tinyllamas/blob/main/stories260K/stories260K.bin
 ```
 
 ```
@@ -201,6 +201,9 @@ wget https://github.com/karpathy/llama2.c/raw/master/tokenizer.bin
 ```
 
 ```
-wget https://github.com/schuhandreas/embedllama-stm32h7a3/raw/main/weights/tok512.bin -O tokenizer260k.bin
+wget https://huggingface.co/karpathy/tinyllamas/blob/main/stories260K/tok512.bin
 ```
 
+## Author
+
+Henrique dos Santos Teixeira
