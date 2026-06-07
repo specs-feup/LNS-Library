@@ -3,7 +3,7 @@ DEBUG =
 OPT   =
 
 ROOT_DIR      = ../..
-LNS_DIR       = $(ROOT_DIR)/lib/lns
+LNS_DIR       = $(ROOT_DIR)/lib
 BUILD         = build
 BUILD_CONVERT = build/convert
 BUILD_TINY    = build/tiny

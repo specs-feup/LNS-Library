@@ -33,18 +33,12 @@ examples:
 	$(MAKE) -C examples/bench
 	$(MAKE) -C examples/tinystories
 
-tests:
-	@echo "$(BLUE)Building tests...$(RESET)"
-	$(MAKE) -C tests
-
 clean:
 	@echo "$(BLUE)Cleaning all...$(RESET)"
-	$(MAKE) -C examples/bench
+	$(MAKE) -C examples/bench clean
 	$(MAKE) -C examples/tinystories clean
-	$(MAKE) -C tests clean
 	@echo "$(GREEN)Done$(RESET)"
 
-# ---------- install / uninstall ----------
 install:
 	@echo "$(BLUE)Installing headers to $(CXX_SYSINCLUDE)...$(RESET)"
 	install -d $(CXX_SYSINCLUDE)
@@ -65,20 +59,3 @@ uninstall:
 	rm -f $(CXX_SYSINCLUDE)/lns_utils.h
 	rm -f $(CXX_SYSINCLUDE)/bfloatsim.hpp
 	@echo "$(GREEN)Uninstall complete$(RESET)"
-
-# ---------- misc ----------
-loc:
-	@echo "----------------------------------------"
-	@printf "%-10s | %10s\n" "Language" "Lines"
-	@echo "----------------------------------------"
-	@cpp_lines=$$(find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) \
-		! -path "./examples/*/build/*" ! -path "./tests/riscpp/build_artifacts/*" \
-		-print0 | xargs -0 cat 2>/dev/null | wc -l); \
-	printf "%-10s | %10d\n" "C/C++" $$cpp_lines; \
-	for ext in c py sh asm s txt md; do \
-		lines=$$(find . -type f -name "*.$$ext" \
-			! -path "./examples/*/build/*" ! -path "./tests/riscpp/build_artifacts/*" \
-			-print0 | xargs -0 cat 2>/dev/null | wc -l); \
-		[ $$lines -gt 0 ] && printf "%-10s | %10d\n" "$$ext" "$$lines"; \
-	done
-	@echo "----------------------------------------"

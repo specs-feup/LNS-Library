@@ -130,7 +130,7 @@ make uninstall      # removes installed headers from system include path
 
 ### `examples/bench/` — LNS vs BFloat accuracy benchmark
 
-Monte Carlo arithmetic accuracy benchmark comparing lns8 vs bf8 (E4M3) and lns16 vs bf16 across five operations (round-trip, mul, div, add, sub), broken down by operand magnitude band, with Mann-Whitney significance testing on 100k samples per cell. See the [bench README](https://www.google.com/search?q=examples/bench/README.md) for full methodology and execution details.
+Monte Carlo arithmetic accuracy benchmark comparing lns8 vs bf8 (E4M3) and lns16 vs bf16 across five operations (round-trip, mul, div, add, sub), broken down by operand magnitude band, with Mann-Whitney significance testing on 100k samples per cell. See the [bench README](examples/bench/README.md) for full methodology and execution details.
 
 #### Per-operation winner (Mann-Whitney p < 0.01, n = 100 000)
 
@@ -164,7 +164,7 @@ bf16 wins on all workloads involving accumulation or activation functions (pi²/
 
 Runs [Andrej Karpathy's llama2.c](https://github.com/karpathy/llama2.c) TinyStories inference using lns16 and bf16 as drop-in replacements for the original float32 weights. Includes weight converters located in `convert/` for both formats and supports both XF and XMB spline variants for lns16 execution located under `tiny/`.
 
-See [`examples/tinystories/README.md`](https://www.google.com/search?q=examples/tinystories/README.md) for step-by-step build instructions, model download parameters, conversion steps, and tokenization usage.
+See [tinystories README](examples/tinystories/README.md) for step-by-step build instructions, model download parameters, conversion steps, and tokenization usage.
 
 ---
 
