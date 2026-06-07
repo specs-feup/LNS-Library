@@ -20,17 +20,22 @@ struct lns {
 
   explicit operator f32() const;
 
-  u8        sign()    const;
-  int_t<n>  exp()     const;
-  bool      is_zero() const;
+  u8       sign()     const;
+  int_t<n> exponent() const;
+  bool     is_zero()  const;
 
-  lns  operator+ (const lns other) const;
-  lns  operator- (const lns other) const;
-  lns  operator- ()                const;
-  lns  operator* (const lns other) const;
-  lns  operator/ (const lns other) const;
+  lns operator+ (const lns other) const;
+  lns operator- (const lns other) const;
+  lns operator- ()                const;
+  lns operator* (const lns other) const;
+  lns operator/ (const lns other) const;
 
+  lns root(const u8 k) const;
   lns sqrt() const;
+  lns exp()  const;
+  lns sinh() const;
+  lns cosh() const;
+  lns tanh() const;
 
   lns& operator+=(const lns other);
   lns& operator-=(const lns other);

@@ -63,8 +63,8 @@ lns<n,i,f>::operator f32() const {
   if (bits == 0)
     return 1.0f;
 
-  const uint_t<n> f32_exp  = (exp() >> f) + 127;
-  const uint_t<n> exp_frac = exp() & ((1 << f) - 1);
+  const uint_t<n> f32_exp  = (exponent() >> f) + 127;
+  const uint_t<n> exp_frac = exponent() & ((1 << f) - 1);
   const int_t<n>  mantissa = lns_l2f_compute(exp_frac << (n - 1 - f));
 
   u32 f32_frac = 0;
@@ -90,7 +90,7 @@ u8 lns<n,i,f>::sign() const {
 }
 
 template<u8 n, u8 i, u8 f>
-int_t<n> lns<n,i,f>::exp() const {
+int_t<n> lns<n,i,f>::exponent() const {
   return ((bits & (1 << (n - 2))) << 1) | (bits & ((1 << (n - 1)) - 1));
 }
 
@@ -106,8 +106,8 @@ lns<n,i,f> lns<n,i,f>::operator+(const lns other) const {
     sign2 = other.sign();
 
   int_t<n>
-    exp1 = exp(),
-    exp2 = other.exp(),
+    exp1 = exponent(),
+    exp2 = other.exponent(),
     diff = exp2 - exp1;
 
   int_t<n> result = 0;
@@ -145,7 +145,7 @@ lns<n,i,f> lns<n,i,f>::operator*(const lns other) const {
     return lns(LNS_ZERO(n), false);
 
   const uint_t<n> _sign     = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
-  const int_t<n>  combined_exp = exp() + other.exp();
+  const int_t<n>  combined_exp = exponent() + other.exponent();
 
   uint_t<n> _exp_bits = (uint_t<n>)combined_exp & ((1 << (n - 1)) - 1);
   if (_exp_bits == LNS_ZERO(n))
@@ -164,15 +164,47 @@ lns<n,i,f> lns<n,i,f>::operator/(const lns other) const {
     return *this;
 
   const uint_t<n> _sign = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
-  const uint_t<n> _exp  = (uint_t<n>)(exp() - other.exp()) & ((1 << (n - 1)) - 1);
+  const uint_t<n> _exp  = (uint_t<n>)(exponent() - other.exponent()) & ((1 << (n - 1)) - 1);
 
   return lns(_sign | _exp, false);
 }
 
 template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::root(const u8 k) const {
+  assert(!sign());
+  return lns((exponent() >> k) & ((1 << (n - 1)) - 1), false);
+}
+
+template<u8 n, u8 i, u8 f>
 lns<n,i,f> lns<n,i,f>::sqrt() const {
   assert(!sign());
-  return lns((exp() >> 1) & ((1 << (n - 1)) - 1), false);
+  return lns((exponent() >> 1) & ((1 << (n - 1)) - 1), false);
+}
+
+template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::exp() const {
+  return lns(std::exp((f32)*this));
+}
+
+template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::sinh() const {
+  const lns<n,i,f> neg_x = -*this;
+  return (exp() - neg_x.exp()) / lns(2.0f);
+}
+
+template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::cosh() const {
+  const lns<n,i,f> neg_x = -*this;
+  return (exp() + neg_x.exp()) / lns(2.0f);
+}
+
+template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::tanh() const {
+  const lns<n,i,f> 
+    two = lns(2.0f),
+    one = lns(1.0f), 
+    e2x = (two * (*this)).exp();
+  return (e2x - one) / (e2x + one);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -203,7 +235,7 @@ bool lns<n,i,f>::operator==(const lns other) const {
 template<u8 n, u8 i, u8 f>
 bool lns<n,i,f>::operator<(const lns other) const {
   const u8 sign1 = sign(), sign2 = other.sign();
-  const int_t<n> exp1 = exp(), exp2 = other.exp();
+  const int_t<n> exp1 = exponent(), exp2 = other.exponent();
   return (sign1 && (!sign2 || exp1 > exp2)) ||
        (!sign1 && !sign2 && exp1 < exp2);
 }
@@ -211,7 +243,7 @@ bool lns<n,i,f>::operator<(const lns other) const {
 template<u8 n, u8 i, u8 f>
 bool lns<n,i,f>::operator>(const lns other) const {
   const u8 sign1 = sign(), sign2 = other.sign();
-  const int_t<n> exp1 = exp(), exp2 = other.exp();
+  const int_t<n> exp1 = exponent(), exp2 = other.exponent();
   return (sign1 && sign2 && exp1 < exp2) ||
        (!sign1 && (sign2 || exp1 > exp2));
 }

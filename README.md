@@ -47,7 +47,7 @@ include/lns/
     └── lns_tables/  # Precomputed .lns table files (gitignored, generate locally)
 
 apps/
-└── bfloat_vs_lns/   # LNS vs bfloat16/bf8 accuracy benchmark (see its README)
+└── bfloat_vs_lns/   # LNS vs bfloat16/bf8 accuracy benchmark
 
 tests/               # RISC-V test generator and compiled artifacts
 ```
@@ -150,9 +150,31 @@ make uninstall  # remove installed headers
 
 ## Applications
 
-### `apps/bfloat_vs_lns/`
+### `apps/bfloat_vs_lns/` — LNS vs BFloat accuracy benchmark
 
-Accuracy benchmark comparing lns8 vs bf8 (E4M3) and lns16 vs bf16 across round-trip, multiply, divide, add, and subtract, broken down by operand magnitude band. See its README for details (coming soon).
+Monte Carlo arithmetic accuracy benchmark comparing lns8 vs bf8 (E4M3) and lns16 vs bf16 across five operations (round-trip, mul, div, add, sub), broken down by operand magnitude band, with Mann-Whitney significance testing on 100k samples per cell. See the [bench README](apps/bfloat_vs_lns/bench/README.md) for full methodology and results.
+
+#### Per-operation winner (Mann-Whitney p < 0.01, n = 100 000)
+
+| Operation | Winner | Reason |
+|-----------|--------|--------|
+| mul | BF | LNS round-trip quantisation noise outweighs its exact-exponent-add property at these bit widths |
+| div | **LNS16**/BF8 | Exact integer subtract on the exponent field; BF must round a full mantissa quotient |
+| add | BF | IEEE 754 correctly-rounded add; LNS add is anchored to input scale via spline approximation |
+| sub | BF | Same as add |
+| round-trip | BF | BF slightly better across all bands |
+
+The div advantage holds across all bands and both bit-widths with no exceptions.
+
+![8-bit winner heatmap](apps/bfloat_vs_lns/bench/results/ops_heatmap_lns8_bf8.png)
+
+![16-bit winner heatmap](apps/bfloat_vs_lns/bench/results/ops_heatmap_lns16_bf16.png)
+
+#### Numerical tests (lns16 vs bf16)
+
+![numerical results](apps/bfloat_vs_lns/bench/results/numerical_rel.png)
+
+bf16 wins on all workloads involving accumulation or activation functions (pi²/6, sigmoid, GELU). Both formats fail on the alternating harmonic series (severe cancellation) and geometric progression (dynamic range exhaustion at 8-bit).
 
 ### RISC-V test suite (`tests/`)
 

@@ -1,6 +1,7 @@
-#ifndef __BFLOAT_SIM_H_
-#define __BFLOAT_SIM_H_
+#ifndef __BFLOAT_SIM_H__
+#define __BFLOAT_SIM_H__
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 
@@ -20,18 +21,33 @@ struct bf8 {
   }
 
   bf8(f32 x) {
+    u32 fb;
+    memcpy(&fb, &x, sizeof(u32));
+
+    u32 sign     = (fb >> 31) & 1u;
+    u32 exp_raw  = (fb >> 23) & 0xFFu;
+    u32 frac_f32 = fb & 0x7FFFFFu;
+
+    // Handle zero (including -0.0)
     if (x == 0.0f) {
-      bits = 0;
+      bits = (u8)(sign << 7);
       return;
     }
 
-    u32 fb;
-    memcpy(&fb, &x, sizeof(u32));
-    u32 sign    = (fb >> 31) & 1u;
-    i32 exp_f32 = (i32)((fb >> 23) & 0xFFu) - 127; // unbias from f32
-    u32 frac3   = (fb >> 20) & 0x7u;               // top 3 mantissa bits
+    // Handle NaN and Inf: clamp to max normal (E4M3 has no NaN/Inf encoding)
+    if (exp_raw == 0xFFu) {
+      bits = (u8)((sign << 7) | 0x77u);
+      return;
+    }
 
-    i32 exp_bf8 = exp_f32 + 7; // rebias to 4-bit bias (7)
+    // Handle f32 subnormals: flush to signed zero
+    if (exp_raw == 0u) {
+      bits = (u8)(sign << 7);
+      return;
+    }
+
+    i32 exp_f32 = (i32)exp_raw - 127; // unbias from f32
+    i32 exp_bf8 = exp_f32 + 7;        // rebias to 4-bit bias (7)
 
     if (exp_bf8 >= 15) {
       // Clamp to max normal: exp=1110, frac=111
@@ -42,6 +58,23 @@ struct bf8 {
       // Flush to signed zero
       bits = (u8)(sign << 7);
       return;
+    }
+
+    // Round-to-nearest-even: keep top 3 mantissa bits, round on bit 19
+    u32 frac3     = (frac_f32 >> 20) & 0x7u;        // top 3 bits kept
+    u32 round_bit = (frac_f32 >> 19) & 1u;           // first discarded bit
+    u32 sticky    = (frac_f32 & 0x7FFFFu) ? 1u : 0u; // any remaining bits set
+
+    frac3 += round_bit & (sticky | (frac3 & 1u)); // RNE
+
+    // Rounding carry into exponent
+    if (frac3 > 0x7u) {
+      frac3 = 0;
+      exp_bf8 += 1;
+      if (exp_bf8 >= 15) {
+        bits = (u8)((sign << 7) | 0x77u);
+        return;
+      }
     }
 
     bits = (u8)((sign << 7) | ((u32)exp_bf8 << 3) | frac3);
@@ -87,13 +120,13 @@ struct bf8 {
     return bf8((f32)*this - (f32)other);
   }
   bf8 operator-() const {
-    return bf8(bits ^ (1u << 7), true); // flip sign bit (bit 7, not 15)
+    return bf8(bits ^ (1u << 7), true); // flip sign bit
   }
   bf8 operator*(const bf8 other) const {
     return bf8((f32)*this * (f32)other);
   }
   bf8 operator/(const bf8 other) const {
-    if ((other.bits & 0x7Fu) == 0) { // zero magnitude (ignore sign)
+    if ((other.bits & 0x7Fu) == 0) {
       fprintf(stderr, "[BF8 FATAL]: Division by Zero detected.\n");
       exit(139);
     }
@@ -144,7 +177,7 @@ struct bf8 {
 };
 
 struct bf16 {
-  u16 bits; // E4M3: [S | EEEEEEEE | MMMMMMM]
+  u16 bits; // E8M7: [S | EEEEEEEE | MMMMMMM]
 
   bf16()
     : bits(0) {}
@@ -207,8 +240,8 @@ struct bf16 {
   }
 
   bf16 operator/(const bf16 other) const {
-    if (other.bits == 0) {
-      fprintf(stderr, "[LNS FATAL]: Division by Zero detected.\n");
+    if ((other.bits & 0x7FFFu) == 0) { // check magnitude only, handles -0.0
+      fprintf(stderr, "[BF16 FATAL]: Division by Zero detected.\n");
       exit(139);
     }
 
@@ -233,7 +266,7 @@ struct bf16 {
   inline bf16& operator/=(const bf16 other) {
     *this = *this / other;
     return *this;
-  } 
+  }
 
   void print_hex() const {
     printf("0x%0*X", 4, bits);
@@ -261,4 +294,4 @@ struct bf16 {
   }
 };
 
-#endif // !__BFLOAT_SIM_H_
+#endif // !__BFLOAT_SIM_H__

@@ -4,3 +4,5 @@ include/lns/spline/lns_tables
 include/lns/spline/lns_tables_backup
 tests/test_files/*
 tests/riscpp/build_artifacts/*
+apps/bfloat_vs_lns/bench/results/results.csv
+apps/bfloat_vs_lns/bench/results/samples.bin

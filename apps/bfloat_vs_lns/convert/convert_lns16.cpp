@@ -2,7 +2,9 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "bfloatsim.hpp"
+#include <lnssim.hpp>
+
+using lns16 = lns<16, 8, 7>;
 
 struct Config {
   i32 
@@ -16,7 +18,7 @@ struct Config {
 };
 
 // ----------------------------------------------------------------------------
-// tokenizer conversion: f32 scores -> bf16 scores
+// tokenizer conversion: f32 scores -> lns16 scores
 // ----------------------------------------------------------------------------
 
 void convert_tokenizer(const char* input_path, const char* output_path, i32 vocab_size) {
@@ -50,10 +52,8 @@ void convert_tokenizer(const char* input_path, const char* output_path, i32 voca
       fprintf(stderr, "failed read\n");
       exit(EXIT_FAILURE);
     }
-
-    bf16 score_bf16 = bf16(score_f32);
-
-    if (fwrite(&score_bf16.bits, sizeof(u16), 1, fout) != 1) {
+    lns16 score_lns = lns16(score_f32);
+    if (fwrite(&score_lns, sizeof(lns16), 1, fout) != 1) {
       fprintf(stderr, "failed write\n");
       exit(EXIT_FAILURE);
     }
@@ -89,10 +89,10 @@ void convert_tokenizer(const char* input_path, const char* output_path, i32 voca
 }
 
 // ----------------------------------------------------------------------------
-// model conversion: f32 weights -> bf16 weights
+// model conversion: f32 weights -> lns16 weights
 // file layout: [Config][f32...f32]
 // weights are a flat array immediately after the config header,
-// so we just convert every f32 to bf16 without needing to know the layout
+// so we just convert every f32 to lns16 without needing to know the layout
 // ----------------------------------------------------------------------------
 
 void convert_model(const char* input_path, const char* output_path) {
@@ -126,19 +126,19 @@ void convert_model(const char* input_path, const char* output_path) {
     abs(cfg.vocab_size), cfg.seq_len
   );
 
-  // stream all weights through bf16 conversion
+  // stream all weights through lns16 conversion
   const i32 BATCH = 4096;
-  f32  buf_f32[BATCH];
-  bf16 buf_bf16[BATCH];
+  f32   buf_f32[BATCH];
+  lns16 buf_lns[BATCH];
 
   size_t n;
   size_t total = 0;
 
   while ((n = fread(buf_f32, sizeof(f32), BATCH, fin)) > 0) {
     for (size_t i = 0; i < n; i++)
-      buf_bf16[i] = bf16(buf_f32[i]);
+      buf_lns[i] = lns16(buf_f32[i]);
 
-    if (fwrite(buf_bf16, sizeof(bf16), n, fout) != n) {
+    if (fwrite(buf_lns, sizeof(lns16), n, fout) != n) {
       fprintf(stderr, "failed write\n");
       exit(EXIT_FAILURE);
     }
@@ -150,10 +150,6 @@ void convert_model(const char* input_path, const char* output_path) {
   fclose(fout);
   printf("model: %s -> %s (%zu weights converted)\n", input_path, output_path, total);
 }
-
-// ----------------------------------------------------------------------------
-// main
-// ----------------------------------------------------------------------------
 
 i32 main(i32 argc, char* argv[]) {
   if (argc < 2) {
