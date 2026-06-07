@@ -1,26 +1,17 @@
 #ifndef __LNS_H__
 #define __LNS_H__
 
-#include "utils.h"
-
-#define LNS8  0x00
-#define LNS16 0x01
-#define LNS32 0x02
-#define LNS64 0x03
-
 template<u8 n>
 struct lns {
+  static constexpr u8 f_width =
+    n == 8  ? 3 :
+    n == 16 ? 7 :
+    n == 32 ? 19 : 47;
+
   f32 bits;
 
-  static constexpr u8 funct3 =
-    n == 8  ? LNS8  :
-    n == 16 ? LNS16 :
-    n == 32 ? LNS32 : LNS64;
-
   lns();
-  lns(f32 x);
-
-  static inline lns from_bits(f32 raw);
+  lns(u32 raw);
 
   explicit operator f32() const;
 
@@ -36,6 +27,8 @@ struct lns {
   lns& operator-=(const lns other);
   lns& operator*=(const lns other);
   lns& operator/=(const lns other);
+
+  void operator= (const lns other) volatile;
 
   bool operator==(const lns other) const;
   bool operator!=(const lns other) const;

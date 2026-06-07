@@ -2,3 +2,5 @@ build
 models
 spline/lns_tables
 spline/lns_tables_backup
+riscpp_test/test_files/*
+riscpp_test/test_asm/*

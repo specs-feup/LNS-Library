@@ -1,6 +1,6 @@
 CXX = g++
 DEBUG =
-OPT		=
+OPT        =
 
 CXX_SYSINCLUDE ?= $(shell $(CXX) -v -x c++ /dev/null 2>&1 \
     | grep '^ /' | head -1 | xargs)
@@ -21,36 +21,53 @@ CXXFLAGS  = -std=c++17 -Wall -Werror \
 CXXFLAGS += $(DEBUG)
 CXXFLAGS += $(OPT)
 
-# ---------- RISC-V toolchain detection ----------
-RISCV64_TOOLCHAIN := $(shell which riscv64-unknown-elf-gcc 2>/dev/null)
-RISCV32_TOOLCHAIN := $(shell which riscv32-unknown-elf-gcc 2>/dev/null)
-
-ifeq ($(RISCV64_TOOLCHAIN),)
-    ifeq ($(RISCV32_TOOLCHAIN),)
-        RISCV_UNAVAILABLE := 1
+# ---------- RISC-V Toolchain & Utilities ----------
+ifeq ($(RISCV_TOOLCHAIN_PREFIX),)
+  ifeq ($(shell which riscv32-unknown-elf-gcc 2>/dev/null),)
+    ifeq ($(shell which riscv64-unknown-elf-gcc 2>/dev/null),)
+      RISCV_UNAVAILABLE := 1
     else
-        RISCV_TOOLCHAIN_PREFIX := riscv32-unknown-elf
-        $(info Using riscv32 toolchain)
+      RISCV_TOOLCHAIN_PREFIX := riscv64-unknown-elf
     endif
-else
-    RISCV_TOOLCHAIN_PREFIX := riscv64-unknown-elf
-    $(info Using riscv64 toolchain)
+  else
+    RISCV_TOOLCHAIN_PREFIX := riscv32-unknown-elf
+  endif
 endif
 
-RISCV_GCC      := $(RISCV_TOOLCHAIN_PREFIX)-gcc
-RISCV_FLAGS    := -march=rv32imf_zicsr -mabi=ilp32 -nostartfiles -Ttext 0
-RISCV_CXXFLAGS := -std=c++17 -Wall -Werror -I./$(LIB_DIR)/lns -DRISCV
+RISCV_GCC  := $(RISCV_TOOLCHAIN_PREFIX)-gcc
+RISCV_AS   := $(RISCV_TOOLCHAIN_PREFIX)-as
+RISCV_LD   := $(RISCV_TOOLCHAIN_PREFIX)-ld
+RISCV_DUMP := $(RISCV_TOOLCHAIN_PREFIX)-objdump
+RISCV_READ := $(RISCV_TOOLCHAIN_PREFIX)-readelf
+
+RISCV_TEST_CXXFLAGS := -c -O0 -nostartfiles -nostdlib -ffreestanding \
+                       -fno-stack-protector -fno-exceptions \
+                       -fno-unwind-tables -fno-asynchronous-unwind-tables \
+                       -march=rv32imf_zicsr -mabi=ilp32 \
+                       -std=c++17 -Wall -Werror -I./lib/lns -DRISCV \
+                       -Wno-implicit-dereference
+RISCV_TEST_ASFLAGS  := -march=rv32imf_zicsr -mabi=ilp32
+
+# Ficheiros do ecossistema Rpp
+RPP_START_SRC   := tools/_start.s
+RPP_LINK_SCRIPT := tools/baremetal.ld
+
+TEST_SRCS   := $(wildcard riscpp_test/test_files/*.cpp)
+
+TEST_OBJS   := $(patsubst riscpp_test/test_files/%.cpp, riscpp_test/test_asm/%.o, $(TEST_SRCS))
+TEST_ELFS   := $(patsubst riscpp_test/test_files/%.cpp, riscpp_test/test_asm/%.elf, $(TEST_SRCS))
+TEST_H_INS  := $(patsubst riscpp_test/test_files/%.cpp, riscpp_test/test_asm/%_code_bram_init.h, $(TEST_SRCS))
 
 # ---------- sources ----------
 MAIN_SRC = $(SRC_DIR)/main.cpp
 MAIN_OBJ = $(BUILD_DIR)/main.o
 TARGET   = $(BUILD_DIR)/lns_test
 
-TINY_LNS16_SRC  			= $(SRC_DIR)/tiny_lns16.cpp
-TINY_BF16_SRC   			= $(SRC_DIR)/tiny_bf16.cpp
+TINY_LNS16_SRC        = $(SRC_DIR)/tiny_lns16.cpp
+TINY_BF16_SRC         = $(SRC_DIR)/tiny_bf16.cpp
 TINY_LNS16_RISCPP_SRC = $(SRC_DIR)/tiny_lns16_riscpp.cpp
-CONV_BF16_SRC   			= $(SRC_DIR)/convert_bf16.cpp
-CONV_LNS16_SRC  			= $(SRC_DIR)/convert_lns16.cpp
+CONV_BF16_SRC         = $(SRC_DIR)/convert_bf16.cpp
+CONV_LNS16_SRC        = $(SRC_DIR)/convert_lns16.cpp
 
 # ---------- headers ----------
 HDR_LNS        = $(LIB_DIR)/lns/lns.hpp
@@ -69,7 +86,11 @@ RESET = \033[0m
 .PHONY: all xf xmb test install uninstall loc clean \
         tiny_xf tiny_xmb \
         convert_bf16 convert_lns16 \
-        test_xf test_xmb
+        test_xf test_xmb \
+        build_generator compile_riscpp_tests
+
+# Força o GNU Make a preservar todos os ficheiros gerados (.o, .elf, .text, etc.) dentro de test_asm
+.SECONDARY:
 
 all: xf
 
@@ -136,6 +157,54 @@ test_xmb: xmb
 	@echo "$(GREEN)Running lns_test with XMB tables...$(RESET)"
 	$(TARGET) spline/lns_tables/xmb_8_q4_3.lns spline/lns_tables/xmb_16_q8_7.lns 100000
 
+# ---------- host-side test generator ----------
+build_generator:
+	@echo "$(BLUE)Compiling host-side test generator...$(RESET)"
+	@mkdir -p riscpp_test/test_files
+	$(CXX) $(CXXFLAGS) -DSPLINE_XF riscpp_test/tests.cpp -o riscpp_test/test_gen
+	@echo "$(GREEN)Build complete → riscpp_test/test_gen$(RESET)"
+
+# Target corrigido para apontar para a lista real de ficheiros .h gerados finais
+compile_riscpp_tests: $(TEST_H_INS)
+	@echo "$(GREEN)All $(words $(TEST_H_INS)) Rpp code/data memory headers successfully generated inside riscpp_test/test_asm/!$(RESET)"
+
+# Passo 1: Montar o _start.s comum do ecossistema tools/ para a pasta test_asm
+riscpp_test/test_asm/_start.o: $(RPP_START_SRC)
+	@mkdir -p riscpp_test/test_asm
+	@echo "$(BLUE)Assembling bootstraper → $@$(RESET)"
+	$(RISCV_AS) $(RISCV_TEST_ASFLAGS) -o $@ $<
+
+# Passo 2: Compilar o ficheiro de teste .cpp gerado para .o
+riscpp_test/test_asm/%.o: riscpp_test/test_files/%.cpp
+ifdef RISCV_UNAVAILABLE
+	$(error "Neither riscv64-unknown-elf-gcc nor riscv32-unknown-elf-gcc is installed!")
+endif
+	@mkdir -p riscpp_test/test_asm
+	@echo "$(BLUE)Compiling test source → $@$(RESET)"
+	$(RISCV_GCC) $(RISCV_TEST_CXXFLAGS) -o $@ $<
+
+# Passo 3: Linkar o _start.o e o %.o do teste usando o linker direto (ld) e o tools/baremetal.ld
+riscpp_test/test_asm/%.elf: riscpp_test/test_asm/%.o riscpp_test/test_asm/_start.o $(RPP_LINK_SCRIPT)
+	@echo "$(BLUE)Linking ELF via linkerscript → $@$(RESET)"
+	$(RISCV_LD) -T$(RPP_LINK_SCRIPT) -m elf32lriscv -o $@ riscpp_test/test_asm/_start.o $<
+
+# Passo 4: Executar o processo de dump, extração hex e geração de ficheiros .h da BRAM mapeando a pasta tools/
+riscpp_test/test_asm/%_code_bram_init.h: riscpp_test/test_asm/%.elf
+	@echo "$(BLUE)Processing artifacts and extracting hex layouts for $*...$(RESET)"
+	$(RISCV_DUMP) -D $< > riscpp_test/test_asm/$*.disasm
+	$(RISCV_DUMP) -d $< > riscpp_test/test_asm/$*.text
+	$(RISCV_READ) -sW $< > riscpp_test/test_asm/$*.table
+	$(RISCV_READ) -x .data -x .sdata -x .rodata $< > riscpp_test/test_asm/$*.data
+	# Processamento de Instruções (Code BRAM)
+	python3 tools/extract_hex.py riscpp_test/test_asm/$*.text
+	@mv instructions.hex riscpp_test/test_asm/$*.instructions.hex
+	python3 tools/include_gen.py riscpp_test/test_asm/$*.instructions.hex -o $@ -n $*_code_bram_init
+	# Processamento de Dados (Data BRAM)
+	python3 tools/extract_data.py riscpp_test/test_asm/$*.data
+	@mv memory_image.hex riscpp_test/test_asm/$*.memory_image.hex
+	python3 tools/include_gen.py riscpp_test/test_asm/$*.memory_image.hex -o riscpp_test/test_asm/$*_data_bram_init.h -n $*_data_bram_init
+	@rm -f instructions.hex memory_image.hex
+
 # ---------- install / uninstall ----------
 install:
 	@echo "$(BLUE)Installing headers to $(CXX_SYSINCLUDE)...$(RESET)"
@@ -180,4 +249,6 @@ loc:
 clean:
 	@echo "$(BLUE)Cleaning build directory...$(RESET)"
 	rm -rf $(BUILD_DIR)
+	rm -rf riscpp_test/test_files
+	rm -rf riscpp_test/test_asm
 	@echo "$(GREEN)Cleanup complete$(RESET)"

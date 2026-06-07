@@ -1,6 +1,13 @@
 #ifndef __LNS_SIM_INL__
 #define __LNS_SIM_INL__
 
+#define LNS_ZERO(n)                         (1 << (n - 2))
+#define F32_SIGN(raw)                       ((raw >> 31) & 1)
+#define F32_EXP(raw)                        ((raw >> 23) & 0xFF)
+#define F32_FRAC(raw)                       (raw & 0x7FFFFF)
+#define F32_FRAC_U32_TO_FLOAT(frac)         ((f64)frac / (f64)(1 << 23))
+#define F32_TO_LNS_FRAC(mantissa, n, prec)  ((uint_t<n>)(lns_f2l_compute(mantissa) >> (n - 1 - prec)))
+
 template<u8 n, u8 i, u8 f>
 lns<n,i,f>::lns()
   : bits(0) {}
