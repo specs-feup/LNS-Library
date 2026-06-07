@@ -1,13 +1,16 @@
 CXX = g++
 
-CXX_SYSINCLUDE ?= $(shell $(CXX) -v -x c++ /dev/null 2>&1 \
-    | grep '^ /' | head -1 | xargs)
+CXX_SYSINCLUDE ?= $(shell $(CXX) -E -x c++ -v /dev/null 2>&1 \
+    | sed -n '/\#include <...>/,/End of search list./p' \
+    | grep '^ ' | head -1 | xargs)
 
 ifeq ($(CXX_SYSINCLUDE),)
   CXX_SYSINCLUDE = /usr/local/include
 endif
 
-LIB_DIR = include/lns
+LIB_DIR = lib
+
+LIB_DIR = lib
 
 HDR_LNS        = $(LIB_DIR)/lns.hpp
 HDR_LNSSIM     = $(LIB_DIR)/lnssim.hpp
@@ -21,13 +24,14 @@ GREEN = \033[032m
 BLUE  = \033[036m
 RESET = \033[0m
 
-.PHONY: all apps tests clean install uninstall loc
+.PHONY: all examples tests clean install uninstall loc
 
-all: apps tests
+all: examples tests
 
-apps:
-	@echo "$(BLUE)Building apps...$(RESET)"
-	$(MAKE) -C apps/bfloat_vs_lns
+examples:
+	@echo "$(BLUE)Building examples...$(RESET)"
+	$(MAKE) -C examples/bench
+	$(MAKE) -C examples/tinystories
 
 tests:
 	@echo "$(BLUE)Building tests...$(RESET)"
@@ -35,7 +39,8 @@ tests:
 
 clean:
 	@echo "$(BLUE)Cleaning all...$(RESET)"
-	$(MAKE) -C apps/bfloat_vs_lns clean
+	$(MAKE) -C examples/bench
+	$(MAKE) -C examples/tinystories clean
 	$(MAKE) -C tests clean
 	@echo "$(GREEN)Done$(RESET)"
 
@@ -67,12 +72,12 @@ loc:
 	@printf "%-10s | %10s\n" "Language" "Lines"
 	@echo "----------------------------------------"
 	@cpp_lines=$$(find . -type f \( -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \) \
-		! -path "./apps/*/build/*" ! -path "./tests/riscpp/build_artifacts/*" \
+		! -path "./examples/*/build/*" ! -path "./tests/riscpp/build_artifacts/*" \
 		-print0 | xargs -0 cat 2>/dev/null | wc -l); \
 	printf "%-10s | %10d\n" "C/C++" $$cpp_lines; \
 	for ext in c py sh asm s txt md; do \
 		lines=$$(find . -type f -name "*.$$ext" \
-			! -path "./apps/*/build/*" ! -path "./tests/riscpp/build_artifacts/*" \
+			! -path "./examples/*/build/*" ! -path "./tests/riscpp/build_artifacts/*" \
 			-print0 | xargs -0 cat 2>/dev/null | wc -l); \
 		[ $$lines -gt 0 ] && printf "%-10s | %10d\n" "$$ext" "$$lines"; \
 	done
