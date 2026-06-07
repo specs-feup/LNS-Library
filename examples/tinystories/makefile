@@ -112,8 +112,8 @@ models: models_dir
 # ---------- model conversion ----------
 convert_models_lns: convert_lns16_xf $(MODELS_LNS)
 	@echo "$(BLUE)Converting models to lns16 (XF)...$(RESET)"
-	$(BUILD_CONVERT)/convert_lns16_xf model $(MODEL_15M)  $(MODEL_15M_LNS)
-	$(BUILD_CONVERT)/convert_lns16_xf model $(MODEL_260K) $(MODEL_260K_LNS)
+	$(BUILD_CONVERT)/convert_lns16_xf $(LNS_TABLES)/lns16_q8_7_xf.lns model $(MODEL_15M)  $(MODEL_15M_LNS)
+	$(BUILD_CONVERT)/convert_lns16_xf $(LNS_TABLES)/lns16_q8_7_xf.lns model $(MODEL_260K) $(MODEL_260K_LNS)
 	@echo "$(GREEN)LNS16 models ready → $(MODELS_LNS)/$(RESET)"
 
 convert_models_bf16: convert_bf16 $(MODELS_BF16)
@@ -127,8 +127,8 @@ convert_models: convert_models_lns convert_models_bf16
 # ---------- tokenizer conversion ----------
 convert_tokenizers_lns: convert_lns16_xf $(MODELS_LNS)
 	@echo "$(BLUE)Converting tokenizers to lns16 (XF)...$(RESET)"
-	$(BUILD_CONVERT)/convert_lns16_xf tokenizer $(TOKENIZER)      $(VOCAB_SIZE)      $(TOKENIZER_LNS)
-	$(BUILD_CONVERT)/convert_lns16_xf tokenizer $(TOKENIZER_260K) $(VOCAB_SIZE_260K) $(TOKENIZER_260K_LNS)
+	$(BUILD_CONVERT)/convert_lns16_xf $(LNS_TABLES)/lns16_q8_7_xf.lns tokenizer $(TOKENIZER)      $(VOCAB_SIZE)      $(TOKENIZER_LNS)
+	$(BUILD_CONVERT)/convert_lns16_xf $(LNS_TABLES)/lns16_q8_7_xf.lns tokenizer $(TOKENIZER_260K) $(VOCAB_SIZE_260K) $(TOKENIZER_260K_LNS)
 	@echo "$(GREEN)LNS16 tokenizers ready → $(MODELS_LNS)/$(RESET)"
 
 convert_tokenizers_bf16: convert_bf16 $(MODELS_BF16)
@@ -148,29 +148,29 @@ $(MODELS_BF16):
 # ---------- run (lns16 XF) ----------
 run_xf_15M: tiny_xf
 	@echo "$(BLUE)Running tiny_xf — stories15M...$(RESET)"
-	$(BUILD_TINY)/tiny_xf $(MODEL_15M_LNS) $(TOKENIZER_LNS)
+	$(BUILD_TINY)/tiny_xf $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_15M_LNS) -z $(TOKENIZER_LNS)
 
 run_xf_260K: tiny_xf
 	@echo "$(BLUE)Running tiny_xf — stories260K...$(RESET)"
-	$(BUILD_TINY)/tiny_xf $(MODEL_260K_LNS) $(TOKENIZER_260K_LNS)
+	$(BUILD_TINY)/tiny_xf $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_260K_LNS) -z $(TOKENIZER_260K_LNS)
 
 # ---------- run (lns16 XMB) ----------
 run_xmb_15M: tiny_xmb
 	@echo "$(BLUE)Running tiny_xmb — stories15M...$(RESET)"
-	$(BUILD_TINY)/tiny_xmb $(MODEL_15M_LNS) $(TOKENIZER_LNS)
+	$(BUILD_TINY)/tiny_xmb $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_15M_LNS) -z $(TOKENIZER_LNS)
 
 run_xmb_260K: tiny_xmb
 	@echo "$(BLUE)Running tiny_xmb — stories260K...$(RESET)"
-	$(BUILD_TINY)/tiny_xmb $(MODEL_260K_LNS) $(TOKENIZER_260K_LNS)
+	$(BUILD_TINY)/tiny_xmb $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_260K_LNS) -z $(TOKENIZER_260K_LNS)
 
 # ---------- run (bf16) ----------
 run_bf16_15M: tiny_bf16
 	@echo "$(BLUE)Running tiny_bf16 — stories15M...$(RESET)"
-	$(BUILD_TINY)/tiny_bf16 $(MODEL_15M_BF16) $(TOKENIZER)
+	$(BUILD_TINY)/tiny_bf16 $(MODEL_15M_BF16) -z $(TOKENIZER_BF16)
 
 run_bf16_260K: tiny_bf16
 	@echo "$(BLUE)Running tiny_bf16 — stories260K...$(RESET)"
-	$(BUILD_TINY)/tiny_bf16 $(MODEL_260K_BF16) $(TOKENIZER_260K)
+	$(BUILD_TINY)/tiny_bf16 $(MODEL_260K_BF16) -z $(TOKENIZER_260K_BF16)
 
 # ---------- build dirs ----------
 $(BUILD_CONVERT):

@@ -234,23 +234,28 @@ void rmsnorm(lns16* o, lns16* x, lns16* weight, i32 size) {
 }
 
 void softmax(lns16* x, i32 size) {
-  // find max value (for numerical stability)
   lns16 max_val = x[0];
   for (i32 i = 1; i < size; i++)
     if (x[i] > max_val)
       max_val = x[i];
 
-  // exp and sum
-  lns16 sum = 0.0f;
+  // equivalent lns accumulation would be:
+  //   lns16 sum = lns16(0.0f);
+  //   for (i32 i = 0; i < size; i++) {
+  //     x[i] = lns16(expf((f32)(x[i] - max_val)));
+  //     sum += x[i];
+  //   }
+  // size grows with sequence position, so lns addition error in sum compounds
+  // as more tokens are generated — exactly when the output collapses.
+  f32 sum = 0.0f;
   for (i32 i = 0; i < size; i++) {
-    lns16 tmp = x[i] - max_val;
-    x[i] = lns16(expf((f32)tmp));
-    sum += x[i];
+    x[i] = lns16(expf((f32)(x[i] - max_val)));
+    sum += (f32)x[i];
   }
+  lns16 sum_lns = lns16(sum);
 
-  // normalize
   for (i32 i = 0; i < size; i++)
-    x[i] /= sum;
+    x[i] /= sum_lns;
 }
 
 void matmul(lns16* xout, lns16* x, lns16* w, i32 n, i32 d) {
@@ -276,7 +281,6 @@ void matmul(lns16* xout, lns16* x, lns16* w, i32 n, i32 d) {
 }
 
 lns16* forward(Transformer* transformer, i32 token, i32 pos) {
-  // a few convenience variables
   Config* p = &transformer->config;
   TransformerWeights* w = &transformer->weights;
   RunState* s = &transformer->state;
@@ -284,130 +288,142 @@ lns16* forward(Transformer* transformer, i32 token, i32 pos) {
   lns16* x = s->x;
   i32 dim = p->dim;
   i32 kv_dim = (p->dim * p->n_kv_heads) / p->n_heads;
-  i32 kv_mul = p->n_heads / p->n_kv_heads; // i32eger multiplier of the kv sharing in multiquery
-  i32 hidden_dim =  p->hidden_dim;
+  i32 kv_mul = p->n_heads / p->n_kv_heads;
+  i32 hidden_dim = p->hidden_dim;
   i32 head_size = dim / p->n_heads;
 
-  // copy the token embedding i32o x
+  // the residual stream is kept in f32 to avoid compounding LNS addition error.
+  // LNS addition requires a spline LUT approximation of log2(1 + 2^diff), which
+  // introduces small per-operation errors. across many layers and many tokens,
+  // these errors accumulate in x[] and corrupt the activations. f32 addition is
+  // exact (within IEEE precision), so we accumulate there and only convert back
+  // to lns16 when x[] is needed as input to rmsnorm or the final classifier.
+  f32 x_f32[dim];
+
+  // copy the token embedding into x and x_f32
   lns16* content_row = w->token_embedding_table + token * dim;
   memcpy(x, content_row, dim * sizeof(*x));
+  for (i32 i = 0; i < dim; i++)
+    x_f32[i] = (f32)x[i];
 
-  // forward all the layers
-  for(i32 l = 0; l < p->n_layers; l++) {
+  for (i32 l = 0; l < p->n_layers; l++) {
 
-    // attention rmsnorm
+    // attention rmsnorm (reads from x, which is kept in sync with x_f32)
     rmsnorm(s->xb, x, w->rms_att_weight + l * dim, dim);
 
-    // key and value point to the kv cache
-    i32 loff = l * p->seq_len * kv_dim; // kv cache layer offset for convenience
+    i32 loff = l * p->seq_len * kv_dim;
     s->k = s->key_cache + loff + pos * kv_dim;
     s->v = s->value_cache + loff + pos * kv_dim;
 
-    // qkv matmuls for this position
     matmul(s->q, s->xb, w->wq + l * dim * dim, dim, dim);
     matmul(s->k, s->xb, w->wk + l * dim * kv_dim, dim, kv_dim);
     matmul(s->v, s->xb, w->wv + l * dim * kv_dim, dim, kv_dim);
 
-    // RoPE relative positional encoding: complex-valued rotate q and k in each head
-    for (i32 i = 0; i < dim; i+=2) {
+    // RoPE
+    for (i32 i = 0; i < dim; i += 2) {
       i32 head_dim = i % head_size;
       lns16 freq = lns16(1.0f / powf(10000.0f, head_dim / (f32)head_size));
       lns16 val = lns16(pos) * freq;
       lns16 fcr = lns16(cosf((f32)val));
       lns16 fci = lns16(sinf((f32)val));
-      i32 rotn = i < kv_dim ? 2 : 1; // how many vectors? 2 = q & k, 1 = q only
+      i32 rotn = i < kv_dim ? 2 : 1;
 
       for (i32 v = 0; v < rotn; v++) {
-        lns16* vec = v == 0 ? s->q : s->k; // the vector to rotate (query or key)
+        lns16* vec = v == 0 ? s->q : s->k;
         lns16 v0 = vec[i];
         lns16 v1 = vec[i + 1];
-
         vec[i]     = v0 * fcr - v1 * fci;
         vec[i + 1] = v0 * fci + v1 * fcr;
       }
     }
 
-    // multihead attention. iterate over all heads
+    // multihead attention
     i32 h;
     #pragma omp parallel for private(h)
     for (h = 0; h < p->n_heads; h++) {
-      // get the query vector for this head
-      lns16* q = s->q + h * head_size;
-      // attention scores for this head
+      lns16* q   = s->q   + h * head_size;
       lns16* att = s->att + h * p->seq_len;
-      // iterate over all timesteps, including the current one
+
       for (i32 t = 0; t <= pos; t++) {
-        // get the key vector for this head and at this timestep
         lns16* k = s->key_cache + loff + t * kv_dim + (h / kv_mul) * head_size;
-        // calculate the attention score as the dot product of q and k
-        lns16 score = 0.0f;
+
+        // equivalent lns accumulation would be:
+        //   lns16 score = lns16(0.0f);
+        //   for (i32 i = 0; i < head_size; i++)
+        //     score += q[i] * k[i];
+        // each += goes through the spline LUT; with small head_size (e.g. 48
+        // for the 260K model) the approximation error dominates the signal,
+        // so we multiply in lns16 (exact) and accumulate in f32 (no LUT error).
+        f32 score_f32 = 0.0f;
         for (i32 i = 0; i < head_size; i++)
-          score += q[i] * k[i];
-        score /= lns16(sqrtf(head_size));
-        // save the score to the attention buffer
-        att[t] = score;
+          score_f32 += (f32)(q[i] * k[i]);
+        att[t] = lns16(score_f32 / sqrtf(head_size));
       }
 
-      // softmax the scores to get attention weights, from 0..pos inclusively
       softmax(att, pos + 1);
 
-      // weighted sum of the values, store back i32o xb
       lns16* xb = s->xb + h * head_size;
 
-      // memset would not work here because it goes byte by byte
-      // and a 0.lns is not 0x0, that is equal to 1.
-      for (i32 i = 0; i < head_size; i++)
-        xb[i] = lns16(0.f);
-
+      // equivalent lns accumulation would be:
+      //   for (i32 t = 0; t <= pos; t++) {
+      //     lns16 a = att[t];
+      //     for (i32 i = 0; i < head_size; i++)
+      //       xb[i] += a * v[i];
+      //   }
+      // same problem: repeated lns addition over many timesteps compounds
+      // spline error into xb[], so we accumulate in f32 and convert once.
+      f32 xb_acc[head_size] = {};
       for (i32 t = 0; t <= pos; t++) {
-        // get the value vector for this head and at this timestep
         lns16* v = s->value_cache + loff + t * kv_dim + (h / kv_mul) * head_size;
-        // get the attention weight for this timestep
-        lns16 a = att[t];
-        // accumulate the weighted value i32o xb
+        f32 a = (f32)att[t];
         for (i32 i = 0; i < head_size; i++)
-          xb[i] += a * v[i];
+          xb_acc[i] += a * (f32)v[i];
       }
+      for (i32 i = 0; i < head_size; i++)
+        xb[i] = lns16(xb_acc[i]);
     }
 
-    // final matmul to get the output of the attention
     matmul(s->xb2, s->xb, w->wo + l * dim * dim, dim, dim);
 
-    // residual connection back i32o x
-    for (i32 i = 0; i < dim; i++)
-      x[i] += s->xb2[i];
+    // equivalent lns residual would be:
+    //   for (i32 i = 0; i < dim; i++)
+    //     x[i] += s->xb2[i];
+    // this is the most damaging case: x[] is the residual stream that persists
+    // across all layers and all tokens. lns addition error here compounds with
+    // every layer pass, causing activations to drift further from ground truth
+    // with each token generated. accumulating in f32 and syncing x[] back
+    // keeps the residual stream clean while still using lns16 everywhere else.
+    for (i32 i = 0; i < dim; i++) {
+      x_f32[i] += (f32)s->xb2[i];
+      x[i] = lns16(x_f32[i]);
+    }
 
-    // ffn rmsnorm
-    rmsnorm(s->xb, x, w->rms_ffn_weight + l*dim, dim);
+    rmsnorm(s->xb, x, w->rms_ffn_weight + l * dim, dim);
 
-    // Now for FFN in PyTorch we have: self.w2(F.silu(self.w1(x)) * self.w3(x))
-    // first calculate self.w1(x) and self.w3(x)
-    matmul(s->hb, s->xb, w->w1 + l*dim*hidden_dim, dim, hidden_dim);
-    matmul(s->hb2, s->xb, w->w3 + l*dim*hidden_dim, dim, hidden_dim);
+    matmul(s->hb,  s->xb, w->w1 + l * dim * hidden_dim, dim, hidden_dim);
+    matmul(s->hb2, s->xb, w->w3 + l * dim * hidden_dim, dim, hidden_dim);
 
-    // SwiGLU non-linearity
+    // SwiGLU
     for (i32 i = 0; i < hidden_dim; i++) {
       lns16 val = s->hb[i];
-      // silu(x)=x*σ(x), where σ(x) is the logistic sigmoid
-      val *= lns16((1.0f / (1.0f + expf((f32)(-val)))));
-      // elementwise multiply with w3(x)
+      val *= lns16(1.0f / (1.0f + expf((f32)(-val))));
       val *= s->hb2[i];
       s->hb[i] = val;
     }
 
-    // final matmul to get the output of the ffn
     matmul(s->xb, s->hb, w->w2 + l * dim * hidden_dim, hidden_dim, dim);
 
-    // residual connection
+    // same reasoning as the attention residual above — accumulate in f32
+    // rather than:
+    //   for (i32 i = 0; i < dim; i++)
+    //     x[i] += s->xb[i];
     for (i32 i = 0; i < dim; i++) {
-      x[i] += s->xb[i];
+      x_f32[i] += (f32)s->xb[i];
+      x[i] = lns16(x_f32[i]);
     }
   }
 
-  // final rmsnorm
   rmsnorm(x, x, w->rms_final_weight, dim);
-
-  // classifier i32o logits
   matmul(s->logits, x, w->wcls, p->dim, p->vocab_size);
   return s->logits;
 }
@@ -975,8 +991,8 @@ void chat(
 #ifndef TESTING
 
 void error_usage() {
-  fprintf(stderr, "Usage:   run <checkpoint> [options]\n");
-  fprintf(stderr, "Example: run model.bin -n 256 -i \"Once upon a time\"\n");
+  fprintf(stderr, "Usage:   run <table_path.lns> <checkpoint> [options]\n");
+  fprintf(stderr, "Example: run path/to/lns16_q8_7_xf.lns model.bin -n 256 -i \"Once upon a time\"\n");
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  -t <lns16>  temperature in [0,inf], default 1.0\n");
   fprintf(stderr, "  -p <lns16>  p value in top-p (nucleus) sampling in [0,1] default 0.9\n");
@@ -990,11 +1006,22 @@ void error_usage() {
 }
 
 i32 main(i32 argc, char *argv[]) {
-  lns16_read_tables("spline/lns_tables/lns16_q8_7_xf.lns");
 
   // default parameters
-  char *checkpoint_path = NULL;  // e.g. out/model.bin
+  char* lns_tables_path = NULL;
+  char* checkpoint_path = NULL;  // e.g. out/model.bin
   const char *tokenizer_path = "tokenizer.bin";
+
+  // poor man's C argparse so we can override the defaults above from the command line
+  if (argc >= 3) {
+    lns_tables_path = argv[1];
+    checkpoint_path = argv[2];
+  } else {
+    error_usage();
+  }
+
+  lns16_read_tables(lns_tables_path);
+
   lns16 temperature = 1.0f;   // 0.0 = greedy deterministic. 1.0 = original. don't set higher
   lns16 topp = 0.9f;      // top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
   i32 steps = 256;      // number of steps to run for
@@ -1003,9 +1030,7 @@ i32 main(i32 argc, char *argv[]) {
   const char *mode = "generate";  // generate|chat
   char *system_prompt = NULL; // the (optional) system prompt to use in chat mode
 
-  // poor man's C argparse so we can override the defaults above from the command line
-  if (argc >= 2) { checkpoint_path = argv[1]; } else { error_usage(); }
-  for (i32 i = 2; i < argc; i+=2) {
+  for (i32 i = 3; i < argc; i += 2) {
     // do some basic validation
     if (i + 1 >= argc)
       error_usage(); // must have arg after flag
@@ -1073,6 +1098,8 @@ i32 main(i32 argc, char *argv[]) {
   free_sampler(&sampler);
   free_tokenizer(&tokenizer);
   free_transformer(&transformer);
+  lns_close();
+
   return 0;
 }
 #endif

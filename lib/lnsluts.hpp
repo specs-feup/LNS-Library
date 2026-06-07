@@ -45,8 +45,16 @@ struct spline_xmb {
   #error "Must define either SPLINE_XF or SPLINE_XMB"
 #endif
 
-LNS8_SPLINE_T  *lns8_lut_add,  *lns8_lut_sub,  *lns8_lut_f2l,  *lns8_lut_l2f;
-LNS16_SPLINE_T *lns16_lut_add, *lns16_lut_sub, *lns16_lut_f2l, *lns16_lut_l2f;
+LNS8_SPLINE_T 
+  *lns8_lut_add = nullptr,
+  *lns8_lut_sub = nullptr,
+  *lns8_lut_f2l = nullptr,
+  *lns8_lut_l2f = nullptr;
+LNS16_SPLINE_T 
+  *lns16_lut_add = nullptr,
+  *lns16_lut_sub = nullptr,
+  *lns16_lut_f2l = nullptr,
+  *lns16_lut_l2f = nullptr;
 
 i8   lns8_read_tables   (const char* filename);
 i8   lns16_read_tables  (const char* filename);

@@ -17,10 +17,6 @@ struct Config {
     seq_len;
 };
 
-// ----------------------------------------------------------------------------
-// tokenizer conversion: f32 scores -> lns16 scores
-// ----------------------------------------------------------------------------
-
 void convert_tokenizer(const char* input_path, const char* output_path, i32 vocab_size) {
   FILE* fin = fopen(input_path, "rb");
   if (!fin) {
@@ -88,13 +84,6 @@ void convert_tokenizer(const char* input_path, const char* output_path, i32 voca
   printf("tokenizer: %s -> %s\n", input_path, output_path);
 }
 
-// ----------------------------------------------------------------------------
-// model conversion: f32 weights -> lns16 weights
-// file layout: [Config][f32...f32]
-// weights are a flat array immediately after the config header,
-// so we just convert every f32 to lns16 without needing to know the layout
-// ----------------------------------------------------------------------------
-
 void convert_model(const char* input_path, const char* output_path) {
   FILE* fin = fopen(input_path, "rb");
   if (!fin) {
@@ -151,26 +140,39 @@ void convert_model(const char* input_path, const char* output_path) {
   printf("model: %s -> %s (%zu weights converted)\n", input_path, output_path, total);
 }
 
+void print_usage() {
+  fprintf(stderr,
+    "usage:\n"
+    "  <table_path.lns> model      <input.bin> <output.bin>\n"
+    "  <table_path.lns> tokenizer  <input.bin> <vocab_size> <output.bin>\n"
+  );
+}
+
 i32 main(i32 argc, char* argv[]) {
-  if (argc < 2) {
-    fprintf(stderr,
-      "usage:\n"
-      "  model      <input.bin> <output.bin>\n"
-      "  tokenizer  <input.bin> <vocab_size> <output.bin>\n"
-    );
+  if (argc < 5) {
+    print_usage();
     return EXIT_FAILURE;
   }
 
-  if (strcmp(argv[1], "model") == 0 && argc == 4) {
-    convert_model(argv[2], argv[3]);
+  const char* table_path = argv[1];
+  const char* mode       = argv[2];
 
-  } else if (strcmp(argv[1], "tokenizer") == 0 && argc == 5) {
-    convert_tokenizer(argv[2], argv[4], atoi(argv[3]));
+  printf("Loading spline tables from: %s\n", table_path);
+  lns16_read_tables(table_path);
 
+  i32 status = EXIT_SUCCESS;
+
+  if (strcmp(mode, "model") == 0 && argc == 5) {
+    convert_model(argv[3], argv[4]);
+  } else if (strcmp(mode, "tokenizer") == 0 && argc == 6) {
+    convert_tokenizer(argv[3], argv[5], atoi(argv[4]));
   } else {
-    fprintf(stderr, "invalid arguments\n");
-    return EXIT_FAILURE;
+    fprintf(stderr, "Error: Invalid arguments or mode mismatch.\n");
+    print_usage();
+    status = EXIT_FAILURE;
   }
 
-  return EXIT_SUCCESS;
+  lns_close();
+
+  return status;
 }

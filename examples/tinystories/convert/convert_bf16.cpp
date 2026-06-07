@@ -15,10 +15,6 @@ struct Config {
     seq_len;
 };
 
-// ----------------------------------------------------------------------------
-// tokenizer conversion: f32 scores -> bf16 scores
-// ----------------------------------------------------------------------------
-
 void convert_tokenizer(const char* input_path, const char* output_path, i32 vocab_size) {
   FILE* fin = fopen(input_path, "rb");
   if (!fin) {
@@ -87,13 +83,6 @@ void convert_tokenizer(const char* input_path, const char* output_path, i32 voca
   fclose(fout);
   printf("tokenizer: %s -> %s\n", input_path, output_path);
 }
-
-// ----------------------------------------------------------------------------
-// model conversion: f32 weights -> bf16 weights
-// file layout: [Config][f32...f32]
-// weights are a flat array immediately after the config header,
-// so we just convert every f32 to bf16 without needing to know the layout
-// ----------------------------------------------------------------------------
 
 void convert_model(const char* input_path, const char* output_path) {
   FILE* fin = fopen(input_path, "rb");

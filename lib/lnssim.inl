@@ -286,8 +286,32 @@ void lns<n,i,f>::debug_print(const char* label) const {
 
 template<u8 n, u8 i, u8 f>
 int_t<n> lns<n,i,f>::lns_f2l_compute(const int_t<n> mantissa) const {
-  if      constexpr (n == 8)  return lns8_lut_compute  (*lns8_lut_f2l,  mantissa, n - 1);
-  else if constexpr (n == 16) return lns16_lut_compute (*lns16_lut_f2l, mantissa, n - 1);
+  if      constexpr (n == 8)  {
+    if (lns8_lut_f2l == nullptr) {
+      fprintf(
+        stderr,
+        "[LNSSIM ERROR]: look up tables for float to lns operation is a nullptr;\n"
+        "\tmaybe you forgot to call lns8_read_tables(...)\n"
+      );
+      exit(1);
+      return (int_t<n>)1;
+    }
+
+    return lns8_lut_compute  (*lns8_lut_f2l,  mantissa, n - 1);
+  }
+  else if constexpr (n == 16) {
+    if (lns16_lut_f2l == nullptr) {
+      fprintf(
+        stderr,
+        "[LNSSIM ERROR]: look up tables for float to lns operation is a nullptr;\n"
+        "\tmaybe you forgot to call lns16_read_tables(...)\n"
+      );
+      exit(1);
+      return (int_t<n>)1;
+    }
+
+    return lns16_lut_compute (*lns16_lut_f2l, mantissa, n - 1);
+  }
   else { 
     fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
     exit(0);
@@ -297,8 +321,32 @@ int_t<n> lns<n,i,f>::lns_f2l_compute(const int_t<n> mantissa) const {
 
 template<u8 n, u8 i, u8 f>
 int_t<n> lns<n,i,f>::lns_l2f_compute(const int_t<n> lns_f) const {
-  if      constexpr (n == 8)  return lns8_lut_compute  (*lns8_lut_l2f,  lns_f, n - 1);
-  else if constexpr (n == 16) return lns16_lut_compute (*lns16_lut_l2f, lns_f, n - 1);
+  if      constexpr (n == 8) {
+    if (lns8_lut_l2f == nullptr) {
+      fprintf(
+        stderr,
+        "[LNSSIM ERROR]: look up tables for lns to float operation is a nullptr;\n"
+        "\tmaybe you forgot to call lns8_read_tables(...)\n"
+      );
+      exit(1);
+      return (int_t<n>)1;
+    }
+
+    return lns8_lut_compute  (*lns8_lut_l2f,  lns_f, n - 1);
+  }
+  else if constexpr (n == 16) {
+    if (lns16_lut_l2f == nullptr) {
+      fprintf(
+        stderr,
+        "[LNSSIM ERROR]: look up tables for convertion operation is a nullptr;\n"
+        "\tmaybe you forgot to call lns16_read_tables(...)\n"
+      );
+      exit(1);
+      return (int_t<n>)1;
+    }
+
+    return lns16_lut_compute (*lns16_lut_l2f, lns_f, n - 1);
+  }
   else {
     fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
     exit(0);
@@ -308,8 +356,32 @@ int_t<n> lns<n,i,f>::lns_l2f_compute(const int_t<n> lns_f) const {
 
 template<u8 n, u8 i, u8 f>
 int_t<n> lns<n,i,f>::lns_add_and_sub_compute(const bool use_add, const int_t<n> diff) const {
-  if      constexpr (n == 8)  return lns8_lut_compute  (use_add ? *lns8_lut_add  : *lns8_lut_sub,  diff, f);
-  else if constexpr (n == 16) return lns16_lut_compute (use_add ? *lns16_lut_add : *lns16_lut_sub, diff, f);
+  if      constexpr (n == 8)  {
+    if (lns8_lut_add == nullptr || lns8_lut_sub == nullptr) {
+      fprintf(
+        stderr,
+        "[LNSSIM ERROR]: look up tables for addition and subtraction operations are nullptr;\n"
+        "\tmaybe you forgot to call lns8_read_tables(...)\n"
+      );
+      exit(1);
+      return (int_t<n>)1;
+    }
+
+    return lns8_lut_compute  (use_add ? *lns8_lut_add  : *lns8_lut_sub,  diff, f);
+  }
+  else if constexpr (n == 16) {
+    if (lns16_lut_add == nullptr || lns16_lut_sub == nullptr) {
+      fprintf(
+        stderr,
+        "[LNSSIM ERROR]: look up tables for addition and subtraction operations are nullptr;\n"
+        "\tmaybe you forgot to call lns16_read_tables(...)\n"
+      );
+      exit(1);
+      return (int_t<n>)1;
+    }
+
+    return lns16_lut_compute (use_add ? *lns16_lut_add : *lns16_lut_sub, diff, f);
+  }
   else {
     fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
     exit(0);
