@@ -1,10 +1,10 @@
 CXX      = g++
 CXXFLAGS = --std=c++17 -Wall -Werror -I./include
 
-SRC 	= src/newtonsdd.cpp
+SRC   = src/newtonsdd.cpp
 BUILD = build
-BIN 	= build/newtonsdd
-LNS 	= lns_tables
+BIN   = build/newtonsdd
+LNS   = lns_tables
 
 all: $(BIN)
 

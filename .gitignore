@@ -1,6 +1,6 @@
 build
 models
-spline/lns_tables
-spline/lns_tables_backup
-riscpp_test/test_files/*
-riscpp_test/test_asm/*
+include/lns/spline/lns_tables
+include/lns/spline/lns_tables_backup
+tests/test_files/*
+tests/riscpp/build_artifacts/*
