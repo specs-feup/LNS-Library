@@ -27,9 +27,8 @@ lns<n,i,f>::lns(f32 x) {
   memcpy(&raw, &x, sizeof(u32));
 
   if (fabsf(x) < FLT_MIN) {
-    const     uint_t<n> sign                      = (raw >> 31) & 1;
-    constexpr uint_t<n> lns_exp_negative_infinity = 1 << (n - 2);
-    bits = (sign << (n - 1)) | lns_exp_negative_infinity;
+    const uint_t<n> sign = (raw >> 31) & 1;
+    bits = (sign << (n - 1)) | LNS_ZERO(n);
     return;
   }
 
@@ -39,8 +38,12 @@ lns<n,i,f>::lns(f32 x) {
 
   int_t<n> float_mantissa = 0;
   if constexpr (n == 64) {
-    float_mantissa = float_exp_frac << 30;
-  } else {
+    float_mantissa = (u64)float_exp_frac << 40;
+  }
+  else if constexpr (n == 32) {
+    float_mantissa = float_exp_frac << 8;
+  }
+  else {
     float_mantissa = float_exp_frac >> (23 - (n - 1));
   }
 
@@ -68,9 +71,13 @@ lns<n,i,f>::operator f32() const {
   const int_t<n>  mantissa = lns_l2f_compute(exp_frac << (n - 1 - f));
 
   u32 f32_frac = 0;
-  if constexpr (n == 64) {
-    f32_frac = (u32)mantissa >> 30;
-  } else {
+  if constexpr (n >= 32) {
+    if constexpr (f <= 23)
+      f32_frac = (u32)mantissa << (23 - (f - 1));
+    else
+      f32_frac = (u32)mantissa >> ((f - 1) - 23);
+  }
+  else {
     f32_frac = (u32)mantissa << (23 - (n - 1));
   }
 
@@ -85,18 +92,48 @@ lns<n,i,f>::operator f32() const {
 }
 
 template<u8 n, u8 i, u8 f>
+lns<n,i,f>::operator f64() const {
+  return (f64)(f32)*this;
+}
+
+template<u8 n, u8 i, u8 f>
+template<u8 n2, u8 i2, u8 f2>
+lns<n, i, f>::lns(const lns<n2, i2, f2>& other) {
+  if (other.is_zero()) {
+    bits = LNS_ZERO(n);
+    return;
+  }
+
+  int_t<n> dst_exp;
+  if constexpr (f >= f2)
+    dst_exp = (int_t<n>)other.exponent() << (f - f2);
+  else
+    dst_exp = (int_t<n>)(other.exponent() >> (f2 - f));
+
+  const int_t<n> max_exp = (int_t<n>(1) << (n - 2)) - 1;
+  if (dst_exp > max_exp)
+    dst_exp = max_exp;
+  if (dst_exp < -max_exp)
+    dst_exp = -max_exp;
+
+  bits = (uint_t<n>)dst_exp & ((uint_t<n>(1) << (n - 1)) - 1);
+  if (other.sign())
+    bits |= (uint_t<n>(1) << (n - 1));
+}
+
+template<u8 n, u8 i, u8 f>
 u8 lns<n,i,f>::sign() const {
   return (u8)(bits >> (n - 1));
 }
 
 template<u8 n, u8 i, u8 f>
 int_t<n> lns<n,i,f>::exponent() const {
-  return ((bits & (1 << (n - 2))) << 1) | (bits & ((1 << (n - 1)) - 1));
+  return ((bits & (uint_t<n>)(1 << (n - 2))) << 1) | (bits & ((uint_t<n>)(1 << (n - 1)) - 1));
 }
 
 template<u8 n, u8 i, u8 f>
 bool lns<n,i,f>::is_zero() const {
-  return (bits & ((1 << (n - 1)) - 1)) == LNS_ZERO(n);
+  return (bits & ((uint_t<n>)(1 << (n - 1)) - 1)) == LNS_ZERO(n);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -123,7 +160,7 @@ lns<n,i,f> lns<n,i,f>::operator+(const lns other) const {
     return lns(LNS_ZERO(n), false);
 
   result  = exp1 + lns_add_and_sub_compute(use_add, diff);
-  result &= (1 << (n - 1)) - 1;
+  result &= (uint_t<n>)(1 << (n - 1)) - 1;
   result |= sign1 << (n - 1);
 
   return lns((uint_t<n>)result, false);
@@ -144,10 +181,10 @@ lns<n,i,f> lns<n,i,f>::operator*(const lns other) const {
   if (is_zero() || other.is_zero())
     return lns(LNS_ZERO(n), false);
 
-  const uint_t<n> _sign     = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
+  const uint_t<n> _sign        = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
   const int_t<n>  combined_exp = exponent() + other.exponent();
 
-  uint_t<n> _exp_bits = (uint_t<n>)combined_exp & ((1 << (n - 1)) - 1);
+  uint_t<n> _exp_bits = (uint_t<n>)combined_exp & ((uint_t<n>)(1 << (n - 1)) - 1);
   if (_exp_bits == LNS_ZERO(n))
     _exp_bits++;
 
@@ -164,7 +201,7 @@ lns<n,i,f> lns<n,i,f>::operator/(const lns other) const {
     return *this;
 
   const uint_t<n> _sign = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
-  const uint_t<n> _exp  = (uint_t<n>)(exponent() - other.exponent()) & ((1 << (n - 1)) - 1);
+  const uint_t<n> _exp  = (uint_t<n>)(exponent() - other.exponent()) & ((uint_t<n>)(1 << (n - 1)) - 1);
 
   return lns(_sign | _exp, false);
 }
@@ -312,8 +349,15 @@ int_t<n> lns<n,i,f>::lns_f2l_compute(const int_t<n> mantissa) const {
 
     return lns16_lut_compute (*lns16_lut_f2l, mantissa, n - 1);
   }
-  else { 
-    fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+  else if constexpr (n == 32 || n == 64) {
+    const f64 
+      m          = (f64)mantissa / (f64)(1ull << (n - 1)),
+      correction = log2(1.0 + m);
+
+    return (int_t<n>)(correction * (f64)(1 << f));
+  }
+  else {
+    fprintf(stderr, "[ERROR]: LNS bit format not implemented");
     exit(0);
     return 0;
   }
@@ -347,8 +391,15 @@ int_t<n> lns<n,i,f>::lns_l2f_compute(const int_t<n> lns_f) const {
 
     return lns16_lut_compute (*lns16_lut_l2f, lns_f, n - 1);
   }
+  else if constexpr (n == 32 || n == 64) {
+    const f64 
+      frac     = (f64)lns_f / (f64)(1ull << (n - 1)),
+      mantissa = pow(2, frac) - 1;
+
+    return (int_t<n>)(mantissa * (f64)(1 << f));
+  }
   else {
-    fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+    fprintf(stderr, "[ERROR]: LNS bit format not implemented");
     exit(0);
     return 0;
   }
@@ -382,8 +433,21 @@ int_t<n> lns<n,i,f>::lns_add_and_sub_compute(const bool use_add, const int_t<n> 
 
     return lns16_lut_compute (use_add ? *lns16_lut_add : *lns16_lut_sub, diff, f);
   }
+  else if constexpr (n == 32 || n == 64) {
+    const f64 z = (f64)diff / (f64)(1 << f);
+
+    f64 correction;
+    // for very negative z (z < -50), 2^z underflows to 0, correction → 0
+    if (use_add) {
+      correction = (z < -50.0) ? 0.0 : log2(1.0 + pow(2.0, z));
+    } else {
+      correction = (z < -50.0) ? 0.0 : log2(1.0 - pow(2.0, z));
+    }
+
+    return (int_t<n>)(correction * (f64)(1 << f));
+  }
   else {
-    fprintf(stderr, "[ERROR]: 32 and 64 bit LNS not implemented");
+    fprintf(stderr, "[ERROR]: LNS bit format not implemented");
     exit(0);
     return 0;
   }

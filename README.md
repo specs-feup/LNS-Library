@@ -23,7 +23,7 @@ The two supported formats are:
 
 **Uniform relative precision.** The quantization step is always the same fraction of the value across the entire representable range, unlike floating point which has higher absolute precision near zero.
 
-**Addition and subtraction are the weak point.** Adding two LNS values requires computing $\log_2(1 + 2^{\text{diff}})$ where $\text{diff}$ is the difference of the exponents. This cannot be done exactly in fixed point and must be approximated via a lookup table. The quality of this approximation is what the spline tables in this library are designed to maximise.
+**Addition and subtraction are the weak point.** Adding two LNS values requires computing $\log_2(1 + 2^{\text{diff}})$ where $\text{diff}$ is the difference of the exponents. This cannot be done exactly in fixed point and must be approximated. The quality of this approximation — implemented via spline lookup tables for lns8 and lns16 — is what the simulation library is designed to faithfully reproduce. The spline tables model the behaviour of the hardware approximation unit; without them, the simulation would not reflect what the hardware actually computes.
 
 LNS is most attractive for multiply-heavy workloads such as neural network inference, signal processing filters, and Bayesian computation, where the hardware savings on multiply significantly outweigh the cost of approximate addition.
 
@@ -41,9 +41,11 @@ Predefined type aliases: `lns8`, `lns16`, `lns32`, `lns64`.
 
 The main API for running LNS computations in software. Defines `lns<N, I, F>` parameterised by total bit width, integer exponent bits, and fractional exponent bits. Implements all arithmetic operators (`+`, `-`, `*`, `/`) and conversion to/from `float`.
 
-Addition and subtraction dispatch to the spline LUT functions in `lnsluts.hpp`. Square root is exact — since a value is stored as $2^e$, `.sqrt()` reduces to an arithmetic right shift of the exponent by one bit, with no table lookup.
+For **lns8 and lns16**, addition and subtraction dispatch to the spline LUT functions in `lnsluts.hpp`, faithfully reproducing the piecewise-linear approximation that the hardware unit computes. Square root is exact in both simulation and hardware — since a value is stored as $2^e$, `.sqrt()` reduces to an arithmetic right shift of the exponent by one bit, with no table lookup.
 
-Must define either `SPLINE_XF` or `SPLINE_XMB` before including, and load the corresponding table files at runtime:
+For **lns32 and lns64**, spline tables are not feasible — the domain of $\log_2(1 \pm 2^x)$ grows to a size that makes precomputed piecewise approximations impractical. These wider formats are therefore emulated using the `math.h` `log2` and `exp2` functions, which provide a numerically exact simulation of the LNS arithmetic without modelling any particular hardware approximation. This makes lns32 and lns64 suitable as a high-precision reference baseline in benchmarks — for instance, to isolate quantisation error from conversion error when comparing lns8 or lns16 against a non-float reference — rather than as a model of a specific hardware implementation.
+
+Must define either `SPLINE_XF` or `SPLINE_XMB` before including (required for lns8/lns16; ignored for lns32/lns64), and load the corresponding table files at runtime:
 
 ```cpp
 #define SPLINE_XMB
@@ -61,7 +63,6 @@ float result2 = (float)(a + b);   // approximated via spline LUT
 float result3 = (float)a.sqrt();  // exact — exp >>= 1
 
 lns_close();
-
 ```
 
 After running `sudo make install` from the repository root, headers are installed flat to your compiler's system include path and can be included directly using angle brackets:
@@ -69,7 +70,6 @@ After running `sudo make install` from the repository root, headers are installe
 ```cpp
 #include <lnssim.hpp>
 #include <lnsluts.hpp>
-
 ```
 
 ### `lnsluts.hpp` — LUT definitions and table I/O
@@ -83,7 +83,7 @@ Defines the spline structs and provides `lns8_read_tables` / `lns16_read_tables`
 
 ## Spline Table Generation
 
-The tool located in `lib/spline/` is a standalone utility that generates the binary `.lns` table files. It implements a greedy spline fitting algorithm over $\log_2(1 + 2^x)$ (add) and $\log_2(1 - 2^x)$ (sub) for each format, and can test table precision against an error threshold.
+The tool located in `lib/spline/` is a standalone utility that generates the binary `.lns` table files for lns8 and lns16. It implements a greedy spline fitting algorithm over $\log_2(1 + 2^x)$ (add) and $\log_2(1 - 2^x)$ (sub) for each format, and can test table precision against an error threshold.
 
 Build and generate the default tables:
 
@@ -91,7 +91,6 @@ Build and generate the default tables:
 cd lib/spline
 make
 # Generates files inside lib/spline/lns_tables/
-
 ```
 
 This updates or produces four files inside `lib/spline/lns_tables/`:
@@ -107,7 +106,6 @@ To test precision directly using the built tool without overwriting tables:
 
 ```bash
 ./build/spline --test --xmb 128 --lns16 8
-
 ```
 
 ---
@@ -121,7 +119,6 @@ make examples    # builds examples targets
 
 sudo make install   # installs headers flat to system include path
 make uninstall      # removes installed headers from system include path
-
 ```
 
 ---
@@ -130,35 +127,31 @@ make uninstall      # removes installed headers from system include path
 
 ### `examples/bench/` — LNS vs BFloat accuracy benchmark
 
-Monte Carlo arithmetic accuracy benchmark comparing lns8 vs bf8 (E4M3) and lns16 vs bf16 across five operations (round-trip, mul, div, add, sub), broken down by operand magnitude band, with Mann-Whitney significance testing on 100k samples per cell. See the [bench README](examples/bench/README.md) for full methodology and execution details.
+Monte Carlo arithmetic accuracy benchmark comparing lns8 vs bf8 (E4M3) and lns16 vs bf16 across five operations (round-trip, mul, div, add, sub), broken down by operand magnitude band, with Mann-Whitney significance testing on 100 000 samples per cell. Errors are measured against lns32 as the reference rather than float32, so that conversion errors are accounted for consistently across all formats. See the [bench README](examples/bench/README.md) for full methodology and execution details.
 
 #### Per-operation winner (Mann-Whitney p < 0.01, n = 100 000)
 
-| Operation | Winner | Reason |
-| --- | --- | --- |
-| mul | BF | LNS round-trip quantisation noise outweighs its exact-exponent-add property at these bit widths |
-| div | **LNS16**/BF8 | Exact integer subtract on the exponent field; BF must round a full mantissa quotient |
-| add | BF | IEEE 754 correctly-rounded add; LNS add is anchored to input scale via spline approximation |
-| sub | BF | Same as add |
-| round-trip | BF | BF slightly better across all bands |
+| Operation | 8-bit winner | 16-bit winner | Reason |
+| --- | --- | --- | --- |
+| mul | **lns8** | bf16 | lns8 benefits from exact exponent addition; at 16 bits, bf16's denser mantissa grid dominates on relative error |
+| div | **lns8** | **lns16** | Exact integer subtract on the exponent field across all bands and both bit-widths, with no exceptions |
+| add | bf8 | bf16 | IEEE 754 correctly-rounded add; LNS add requires a nonlinear spline correction anchored to input scale |
+| sub | bf8 | bf16 | Same as add |
+| round-trip | bf8 | tie | bf8 slightly better across all bands; lns16 and bf16 statistically indistinguishable |
 
-The div advantage holds across all bands and both bit-widths with no exceptions.
+The div advantage for LNS holds across all magnitude bands and both bit-widths with no exceptions. The mul result diverges between bit-widths: lns8 wins on both absolute and relative error, while bf16 wins on relative error at 16 bits but lns16 recovers the advantage on absolute error — reflecting bf16's asymmetric precision distribution favouring values near zero.
 
-
- ![8-bit winner heatmap](examples/bench/results/ops_heatmap_lns8_bf8.png)
-
-
-![16-bit winner heatmap](examples/bench/results/ops_heatmap_lns16_bf16.png)
-
+![8-bit winner heatmap — relative error](examples/bench/results/ops_heatmap_lns8_bf8_rel.png)
+![8-bit winner heatmap — absolute error](examples/bench/results/ops_heatmap_lns8_bf8_abs.png)
+![16-bit winner heatmap — relative error](examples/bench/results/ops_heatmap_lns16_bf16_rel.png)
+![16-bit winner heatmap — absolute error](examples/bench/results/ops_heatmap_lns16_bf16_abs.png)
 
 #### Numerical tests (lns16 vs bf16)
 
-
 ![numerical results](examples/bench/results/numerical_rel.png)
+![numerical results](examples/bench/results/numerical_abs.png)
 
-
-bf16 wins on all workloads involving accumulation or activation functions (pi²/6, sigmoid, GELU). Both formats fail on the alternating harmonic series (severe cancellation) and geometric progression (dynamic range exhaustion at 8-bit).
-
+bf16 wins on almost all workloads involving accumulation or activation functions (π²/6 forward and backward, sigmoid, GELU). lns16 is notably worse on GELU, whose evaluation involves a composition of nonlinear operations that compound poorly in the log domain. Both formats fail on the alternating harmonic series (severe cancellation) and geometric progression (dynamic range exhaustion), with all 8-bit formats saturating at ~1.0 relative error on accumulation-heavy tasks.
 
 ### `examples/tinystories/` — TinyStories inference in lns16 and bf16
 
@@ -176,9 +169,9 @@ To decouple the core's architecture development from this library, **the target 
 
 ---
 
-## Planned: lns32 and lns64
+## Planned: lns32 and lns64 hardware approximation
 
-The spline table approach used for lns8 and lns16 becomes impractical at wider formats — the domain of $\log_2(1 \pm 2^x)$ grows significantly and table sizes explode. A different approximation strategy is needed.
+lns32 and lns64 are currently available in simulation via `math.h`, providing an exact LNS reference suitable for benchmarking. Hardware-grade approximation for these wider formats requires a different strategy from the spline tables used for lns8 and lns16, as the domain of $\log_2(1 \pm 2^x)$ grows to a size that makes precomputed piecewise tables impractical.
 
 Candidates under development and tracking inside `lib/newtonsdd/`:
 

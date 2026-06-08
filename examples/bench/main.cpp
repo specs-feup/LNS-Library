@@ -18,8 +18,9 @@
 
 #include "lnssim.hpp"
 
-typedef lns<16, 8, 7> lns16;
-typedef lns<8,  4, 3> lns8;
+typedef lns<32, 8, 23> lns32;
+typedef lns<16, 8, 7>  lns16;
+typedef lns<8,  4, 3>  lns8;
 
 #include "bench_ops.h"
 #include "bench_ops.cpp"

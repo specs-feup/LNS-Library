@@ -56,72 +56,76 @@ static format_stats run_lns8(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB8(lo, hi);
-    const f32 b = SB8(lo, hi);
+    const lns32 
+      a = SB8(lo, hi),
+      b = SB8(lo, hi);
 
-    const f32 exp = (f32)((f64)a * (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a * b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns8(a) * lns8(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns8(a) * lns8(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.mul, got, exp);
+    stats_update(&fs.mul, (f32)got, (f32)exp);
     k++;
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB8(lo, hi);
-    const f32 b = SB8(lo, hi);
+    const lns32 
+      a = SB8(lo, hi),
+      b = SB8(lo, hi);
 
-    const f32 exp = (f32)((f64)a / (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a / b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns8(a) / lns8(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns8(a) / lns8(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.div_, got, exp);
+    stats_update(&fs.div_, (f32)got, (f32)exp);
     k++;
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB8(lo, hi);
-    const f32 b = SB8(lo, hi);
+    const lns32
+      a = SB8(lo, hi),
+      b = SB8(lo, hi);
 
-    if (cancels((f64)a, (f64)b, F))
+    if (cancels((f32)a, (f32)b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a + (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a + b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns8(a) + lns8(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns8(a) + lns8(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.add_, got, exp);
+    stats_update(&fs.add_, (f32)got, (f32)exp);
     k++;
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB8(lo, hi);
-    const f32 b = SB8(lo, hi);
+    const lns32 
+      a = SB8(lo, hi),
+      b = SB8(lo, hi);
 
-    if (cancels((f64)a, -(f64)b, F))
+    if (cancels((f32)a, (f32)-b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a - (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a - b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns8(a) - lns8(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns8(a) - lns8(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.sub_, got, exp);
+    stats_update(&fs.sub_, (f32)got, (f32)exp);
     k++;
   }
 
@@ -139,10 +143,11 @@ static format_stats run_bf8(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF8(lo, hi);
-    const f32 b = SBBF8(lo, hi);
+    const f32 
+      a = SBBF8(lo, hi),
+      b = SBBF8(lo, hi);
 
-    const f32 exp = (f32)((f64)a * (f64)b);
+    const f32 exp = a * b;
     if (!isfinite(exp))
       continue;
 
@@ -155,10 +160,11 @@ static format_stats run_bf8(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF8(lo, hi);
-    const f32 b = SBBF8(lo, hi);
+    const f32 
+      a = SBBF8(lo, hi),
+      b = SBBF8(lo, hi);
 
-    const f32 exp = (f32)((f64)a / (f64)b);
+    const f32 exp = a / b;
     if (!isfinite(exp))
       continue;
 
@@ -171,13 +177,14 @@ static format_stats run_bf8(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF8(lo, hi);
-    const f32 b = SBBF8(lo, hi);
+    const f32 
+      a = SBBF8(lo, hi),
+      b = SBBF8(lo, hi);
 
-    if (cancels((f64)a, (f64)b, F))
+    if (cancels(a, b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a + (f64)b);
+    const f32 exp = a + b;
     if (!isfinite(exp))
       continue;
 
@@ -190,13 +197,14 @@ static format_stats run_bf8(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF8(lo, hi);
-    const f32 b = SBBF8(lo, hi);
+    const f32 
+      a = SBBF8(lo, hi),
+      b = SBBF8(lo, hi);
 
-    if (cancels((f64)a, -(f64)b, F))
+    if (cancels(a, -b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a - (f64)b);
+    const f32 exp = a - b;
     if (!isfinite(exp))
       continue;
 
@@ -222,72 +230,76 @@ static format_stats run_lns16(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB16(lo, hi);
-    const f32 b = SB16(lo, hi);
+    const lns32 
+      a = SB16(lo, hi),
+      b = SB16(lo, hi);
 
-    const f32 exp = (f32)((f64)a * (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a * b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns16(a) * lns16(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns16(a) * lns16(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.mul, got, exp);
+    stats_update(&fs.mul, (f32)got, (f32)exp);
     k++;
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB16(lo, hi);
-    const f32 b = SB16(lo, hi);
+    const lns32 
+      a = SB16(lo, hi),
+      b = SB16(lo, hi);
 
-    const f32 exp = (f32)((f64)a / (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a / b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns16(a) / lns16(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns16(a) / lns16(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.div_, got, exp);
+    stats_update(&fs.div_, (f32)got, (f32)exp);
     k++;
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB16(lo, hi);
-    const f32 b = SB16(lo, hi);
+    const lns32 
+      a = SB16(lo, hi),
+      b = SB16(lo, hi);
 
-    if (cancels((f64)a, (f64)b, F))
+    if (cancels((f32)a, (f32)b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a + (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a + b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns16(a) + lns16(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns16(a) + lns16(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.add_, got, exp);
+    stats_update(&fs.add_, (f32)got, (f32)exp);
     k++;
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SB16(lo, hi);
-    const f32 b = SB16(lo, hi);
+    const f32 
+      a = SB16(lo, hi),
+      b = SB16(lo, hi);
 
-    if (cancels((f64)a, -(f64)b, F))
+    if (cancels((f32)a, (f32)-b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a - (f64)b);
-    if (!isfinite(exp))
+    const lns32 exp = a - b;
+    if (!isfinite((f32)exp))
       continue;
 
-    const f32 got = (f32)(lns16(a) - lns16(b));
-    if (!isfinite(got))
+    const lns32 got = (lns32)(lns16(a) - lns16(b));
+    if (!isfinite((f32)got))
       continue;
 
-    stats_update(&fs.sub_, got, exp);
+    stats_update(&fs.sub_, (f32)got, (f32)exp);
     k++;
   }
 
@@ -305,10 +317,11 @@ static format_stats run_bf16(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF16(lo, hi);
-    const f32 b = SBBF16(lo, hi);
+    const f32 
+      a = SBBF16(lo, hi),
+      b = SBBF16(lo, hi);
 
-    const f32 exp = (f32)((f64)a * (f64)b);
+    const f32 exp = a * b;
     if (!isfinite(exp))
       continue;
 
@@ -321,10 +334,11 @@ static format_stats run_bf16(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF16(lo, hi);
-    const f32 b = SBBF16(lo, hi);
+    const f32 
+      a = SBBF16(lo, hi),
+      b = SBBF16(lo, hi);
 
-    const f32 exp = (f32)((f64)a / (f64)b);
+    const f32 exp = a / b;
     if (!isfinite(exp))
       continue;
 
@@ -337,13 +351,14 @@ static format_stats run_bf16(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF16(lo, hi);
-    const f32 b = SBBF16(lo, hi);
+    const f32 
+      a = SBBF16(lo, hi),
+      b = SBBF16(lo, hi);
 
-    if (cancels((f64)a, (f64)b, F))
+    if (cancels(a, b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a + (f64)b);
+    const f32 exp = a + b;
     if (!isfinite(exp))
       continue;
 
@@ -356,13 +371,14 @@ static format_stats run_bf16(u32 n, f32 lo, f32 hi) {
   }
 
   for (u32 k = 0; k < n; ) {
-    const f32 a = SBBF16(lo, hi);
-    const f32 b = SBBF16(lo, hi);
+    const f32 
+      a = SBBF16(lo, hi),
+      b = SBBF16(lo, hi);
 
-    if (cancels((f64)a, -(f64)b, F))
+    if (cancels(a, -b, F))
       continue;
 
-    const f32 exp = (f32)((f64)a - (f64)b);
+    const f32 exp = a - b;
     if (!isfinite(exp))
       continue;
 

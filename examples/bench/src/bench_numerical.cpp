@@ -9,61 +9,68 @@
 
 // ---------------------------------------------------------------------------
 // 1. Geometric progression:  a_n = a_0 * r^n
-//    a_0=1, r=1.015, n=1000 iterations.
+//    a_0=1, r=1.015, n=100 iterations.
 //
+//    pow(1.015, 100) ≈ 4.43, safely inside (2^-p, 16) for all formats.
 //    Each step is a single multiply.  LNS mul is exact integer add in
 //    log-space; BF16 mul rounds the full mantissa product every step.
-//    Over 1000 steps the rounding accumulates.  The f64 reference is
-//    computed with the same loop to match iteration order exactly.
+//    Over 100 steps the rounding accumulates.  The reference is computed
+//    with the same loop to match iteration order exactly.
 // ---------------------------------------------------------------------------
 
 static scalar_result geom_lns16(void) {
-  lns16 acc        = lns16(1.0f);
-  const lns16 r    = lns16(1.015f);
+  lns16 acc     = lns16(1.0f);
+  const lns16 r = lns16(1.015f);
 
-  for (i32 i = 0; i < 1000; i++)
-    acc = acc * r;
+  for (i32 i = 0; i < 100; i++)
+    acc *= r;
 
-  const f64 expected = pow(1.015, 1000.0);
-  return scalar_compare((f64)(f32)acc, expected);
+  const lns32 expected = lns32((f32)pow(1.015, 100.0));
+  return scalar_compare((f64)acc, (f64)expected);
 }
 
 static scalar_result geom_bf16(void) {
-  bf16 acc        = bf16(1.0f);
-  const bf16 r    = bf16(1.015f);
+  bf16 acc     = bf16(1.0f);
+  const bf16 r = bf16(1.015f);
 
-  for (i32 i = 0; i < 1000; i++)
+  for (i32 i = 0; i < 100; i++)
     acc = bf16((f32)acc * (f32)r);
 
-  const f64 expected = pow(1.015, 1000.0);
-  return scalar_compare((f64)(f32)acc, expected);
+  const f32 expected = (f32)pow(1.015, 100.0);
+  return scalar_compare((f64)(f32)acc, (f64)expected);
 }
 
 static scalar_result geom_lns8(void) {
-  lns8 acc        = lns8(1.0f);
-  const lns8 r    = lns8(1.015f);
+  lns8 acc     = lns8(1.0f);
+  const lns8 r = lns8(1.015f);
 
-  for (i32 i = 0; i < 1000; i++)
-    acc = acc * r;
+  for (i32 i = 0; i < 100; i++)
+    acc *= r;
 
-  const f64 expected = pow(1.015, 1000.0);
-  return scalar_compare((f64)(f32)acc, expected);
+  const lns32 expected = lns32((f32)pow(1.015, 100.0));
+  return scalar_compare((f64)acc, (f64)expected);
 }
 
 static scalar_result geom_bf8(void) {
-  bf8 acc        = bf8(1.0f);
-  const bf8 r    = bf8(1.015f);
+  bf8 acc     = bf8(1.0f);
+  const bf8 r = bf8(1.015f);
 
-  for (i32 i = 0; i < 1000; i++)
+  for (i32 i = 0; i < 100; i++)
     acc = bf8((f32)acc * (f32)r);
 
-  const f64 expected = pow(1.015, 1000.0);
-  return scalar_compare((f64)(f32)acc, expected);
+  const f32 expected = (f32)pow(1.015, 100.0);
+  return scalar_compare((f64)(f32)acc, (f64)expected);
 }
 
 // ---------------------------------------------------------------------------
 // 2. Euclidean norm:  ||x|| = sqrt(sum(x_i^2))
 //    N=4096 values sampled log-uniformly in [0.01, 100].
+//
+//    The raw norm ≈ 1500 which overflows lns8 and inflates absolute
+//    errors.  We normalise by dividing by 256 so the expected result
+//    falls in (1, 16) for typical sample sets, well inside all formats'
+//    representable range.  The division is applied to each input sample
+//    before squaring so the computation path is identical across formats.
 //
 //    Squaring amplifies relative error; summing N terms amplifies abs
 //    error additively.  LNS squaring is exact (double the exponent);
@@ -71,13 +78,14 @@ static scalar_result geom_bf8(void) {
 //    We freeze the sample so both formats operate on identical inputs.
 // ---------------------------------------------------------------------------
 
-#define NORM_N 4096
+#define NORM_N   4096
+#define NORM_DIV 256.0f
 
 static f32 g_norm_samples[NORM_N];
 
 static void norm_init_samples(void) {
   for (i32 i = 0; i < NORM_N; i++)
-    g_norm_samples[i] = sample_band(0.01f, 100.0f, 0.01f);
+    g_norm_samples[i] = sample_band(0.01f, 100.0f, 0.01f) / NORM_DIV;
 }
 
 static scalar_result norm_lns16(void) {
@@ -102,12 +110,12 @@ static scalar_result norm_bf16(void) {
     acc = (f32)bf16(acc + v * v);
   }
 
-  f64 expected = 0.0;
+  f32 expected = 0.0f;
   for (i32 i = 0; i < NORM_N; i++)
-    expected += (f64)g_norm_samples[i] * (f64)g_norm_samples[i];
+    expected += g_norm_samples[i] * g_norm_samples[i];
 
-  expected = sqrt(expected);
-  return scalar_compare((f64)(f32)bf16(sqrtf(acc)), expected);
+  expected = sqrtf(expected);
+  return scalar_compare((f64)(f32)bf16(sqrtf(acc)), (f64)expected);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +126,8 @@ static scalar_result norm_bf16(void) {
 //    The result converges slowly to pi but each partial sum swings far.
 //    Both formats struggle; the test reveals how badly LNS add error
 //    grows relative to BF16's correctly-rounded add.
+//
+//    The final result pi ≈ 3.14 is already inside (2^-p, 16).
 // ---------------------------------------------------------------------------
 
 static scalar_result leibniz_lns16(void) {
@@ -128,7 +138,7 @@ static scalar_result leibniz_lns16(void) {
   }
 
   const lns16 result = lns16(4.0f) * acc;
-  return scalar_compare((f64)(f32)result, M_PI);
+  return scalar_compare((f64)result, (f64)lns32((f32)M_PI));
 }
 
 static scalar_result leibniz_bf16(void) {
@@ -140,13 +150,16 @@ static scalar_result leibniz_bf16(void) {
       : (f32)bf16(acc + term);
   }
 
-  const f32 result = (f32)bf16(4.0f * acc);
-  return scalar_compare((f64)result, M_PI);
+  const f32 result   = (f32)bf16(4.0f * acc);
+  const f32 expected = (f32)M_PI;
+  return scalar_compare((f64)result, (f64)expected);
 }
 
 // ---------------------------------------------------------------------------
 // 4. Large-to-small accumulation: sum_{n=1}^{5000} 1/n^2 = pi^2/6
 //    Computed forward (n=1..N) and backward (n=N..1).
+//
+//    pi^2/6 ≈ 1.645, already inside (2^-p, 16) for all formats.
 //
 //    Forward: adds tiny 1/n^2 increments to a large accumulator —
 //    exercises the regime where BF16 add wins (correctly rounded to result).
@@ -156,7 +169,7 @@ static scalar_result leibniz_bf16(void) {
 // ---------------------------------------------------------------------------
 
 #define ACCUM_N 5000
-static const f64 PI2_OVER_6 = (M_PI * M_PI) / 6.0;
+static const f32 PI2_OVER_6_F32 = (f32)((M_PI * M_PI) / 6.0);
 
 static scalar_result accum_lns16_fwd(void) {
   lns16 acc = lns16(0.0f);
@@ -166,7 +179,7 @@ static scalar_result accum_lns16_fwd(void) {
     acc = acc + v;
   }
 
-  return scalar_compare((f64)(f32)acc, PI2_OVER_6);
+  return scalar_compare((f64)acc, (f64)lns32(PI2_OVER_6_F32));
 }
 
 static scalar_result accum_lns16_bwd(void) {
@@ -177,7 +190,7 @@ static scalar_result accum_lns16_bwd(void) {
     acc = acc + v;
   }
 
-  return scalar_compare((f64)(f32)acc, PI2_OVER_6);
+  return scalar_compare((f64)acc, (f64)lns32(PI2_OVER_6_F32));
 }
 
 static scalar_result accum_bf16_fwd(void) {
@@ -188,7 +201,7 @@ static scalar_result accum_bf16_fwd(void) {
     acc = (f32)bf16(acc + v);
   }
 
-  return scalar_compare((f64)acc, PI2_OVER_6);
+  return scalar_compare((f64)acc, (f64)PI2_OVER_6_F32);
 }
 
 static scalar_result accum_bf16_bwd(void) {
@@ -199,13 +212,15 @@ static scalar_result accum_bf16_bwd(void) {
     acc = (f32)bf16(acc + v);
   }
 
-  return scalar_compare((f64)acc, PI2_OVER_6);
+  return scalar_compare((f64)acc, (f64)PI2_OVER_6_F32);
 }
 
 // ---------------------------------------------------------------------------
 // 5. Sigmoid activation:  sigma(x) = 1 / (1 + exp(-x))
 //    x swept from -10 to +10 in 1001 uniform steps.
-//    avg_rel across all sweep points is the reported metric.
+//
+//    Output is always in (0, 1), well inside (2^-p, 16).
+//    avg_rel and avg_abs across all sweep points are reported.
 //    LNS exp is native (exponent field inversion); BF16 must approximate.
 // ---------------------------------------------------------------------------
 
@@ -213,6 +228,7 @@ static scalar_result accum_bf16_bwd(void) {
 
 static scalar_result sigmoid_lns16(void) {
   f64 sum_rel = 0.0;
+  f64 sum_abs = 0.0;
   u32 cnt     = 0;
 
   for (i32 i = 0; i < SIGMOID_N; i++) {
@@ -222,45 +238,48 @@ static scalar_result sigmoid_lns16(void) {
     const lns16 denom    = lns16(1.0f) + e_negx;
     const lns16 sig      = lns16(1.0f) / denom;
     const f64   got      = (f64)(f32)sig;
-    const f64   expected = 1.0 / (1.0 + exp(-(f64)x));
+    const f64   expected = (f64)(f32)lns32(1.0f / (1.0f + expf(-x)));
+    const f64   abs      = fabs(got - expected);
     const f64   rel      = fabs(expected) > 1e-15
-      ? fabs(got - expected) / fabs(expected)
-      : fabs(got - expected);
+      ? abs / fabs(expected)
+      : abs;
+    sum_abs += abs;
     sum_rel += rel;
     cnt++;
   }
 
-  const f64 avg_rel = sum_rel / cnt;
   scalar_result r;
-  r.got      = avg_rel;
+  r.got      = sum_rel / cnt;
   r.expected = 0.0;
-  r.abs_err  = avg_rel;
-  r.rel_err  = avg_rel;
+  r.abs_err  = sum_abs / cnt;
+  r.rel_err  = sum_rel / cnt;
 
   return r;
 }
 
 static scalar_result sigmoid_bf16(void) {
   f64 sum_rel = 0.0;
+  f64 sum_abs = 0.0;
   u32 cnt     = 0;
 
   for (i32 i = 0; i < SIGMOID_N; i++) {
     const f32 x        = -10.0f + 20.0f * (f32)i / (f32)(SIGMOID_N - 1);
     const f32 got_f    = (f32)bf16(1.0f / (1.0f + expf(-x)));
-    const f64 expected = 1.0 / (1.0 + exp(-(f64)x));
-    const f64 rel      = fabs(expected) > 1e-15
-      ? fabs((f64)got_f - expected) / fabs(expected)
-      : fabs((f64)got_f - expected);
+    const f32 expected = 1.0f / (1.0f + expf(-x));
+    const f64 abs      = fabs((f64)got_f - (f64)expected);
+    const f64 rel      = fabs((f64)expected) > 1e-15
+      ? abs / fabs((f64)expected)
+      : abs;
+    sum_abs += abs;
     sum_rel += rel;
     cnt++;
   }
 
-  const f64 avg_rel = sum_rel / cnt;
   scalar_result r;
-  r.got      = avg_rel;
+  r.got      = sum_rel / cnt;
   r.expected = 0.0;
-  r.abs_err  = avg_rel;
-  r.rel_err  = avg_rel;
+  r.abs_err  = sum_abs / cnt;
+  r.rel_err  = sum_rel / cnt;
 
   return r;
 }
@@ -268,8 +287,12 @@ static scalar_result sigmoid_bf16(void) {
 // ---------------------------------------------------------------------------
 // 6. GELU activation (tanh approximation):
 //    GELU(x) = 0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x^3)))
-//    x swept from -4 to +4 in 801 steps.
-//    avg_rel across all points is reported.
+//
+//    Sweep narrowed to x in [-2, 2] (801 steps) so that all expected
+//    outputs fall in (-1.1, 2), safely inside (2^-p, 16).  The full
+//    [-4, 4] range pushes outputs toward ±4 which exhausts lns8 dynamic
+//    range and saturates relative error before format differences appear.
+//    avg_rel and avg_abs across all sweep points are reported.
 // ---------------------------------------------------------------------------
 
 #define GELU_N 801
@@ -278,10 +301,11 @@ static const f64 GELU_K = 0.044715;
 
 static scalar_result gelu_lns16(void) {
   f64 sum_rel = 0.0;
+  f64 sum_abs = 0.0;
   u32 cnt     = 0;
 
   for (i32 i = 0; i < GELU_N; i++) {
-    const f32   x        = -4.0f + 8.0f * (f32)i / (f32)(GELU_N - 1);
+    const f32   x        = -2.0f + 4.0f * (f32)i / (f32)(GELU_N - 1);
     const lns16 lx       = lns16(x);
     const lns16 x3       = lx * lx * lx;
     const lns16 inner    = lns16((f32)GELU_C) * (lx + lns16((f32)GELU_K) * x3);
@@ -289,49 +313,51 @@ static scalar_result gelu_lns16(void) {
     const lns16 gelu     = lns16(0.5f) * lx * (lns16(1.0f) + th);
     const f64   got      = (f64)(f32)gelu;
     const f64   xd       = (f64)x;
-    const f64   expected = 0.5 * xd * (1.0 + tanh(GELU_C * (xd + GELU_K * xd*xd*xd)));
-    const f64   rel      = fabs(expected) > 1e-15
-      ? fabs(got - expected) / fabs(expected)
-      : fabs(got - expected);
+    const f64   exp_f64  = 0.5 * xd * (1.0 + tanh(GELU_C * (xd + GELU_K * xd*xd*xd)));
+    const f32   expected = (f32)lns32((f32)exp_f64);
+    const f64   abs      = fabs(got - (f64)expected);
+    const f64   rel      = fabs((f64)expected) > 1e-15
+      ? abs / fabs((f64)expected)
+      : abs;
+    sum_abs += abs;
     sum_rel += rel;
     cnt++;
   }
 
-  const f64 avg_rel = sum_rel / cnt;
   scalar_result r;
-  r.got      = avg_rel;
+  r.got      = sum_rel / cnt;
   r.expected = 0.0;
-  r.abs_err  = avg_rel;
-  r.rel_err  = avg_rel;
-  
+  r.abs_err  = sum_abs / cnt;
+  r.rel_err  = sum_rel / cnt;
+
   return r;
 }
 
 static scalar_result gelu_bf16(void) {
   f64 sum_rel = 0.0;
+  f64 sum_abs = 0.0;
   u32 cnt     = 0;
 
   for (i32 i = 0; i < GELU_N; i++) {
-    const f32 x        = -4.0f + 8.0f * (f32)i / (f32)(GELU_N - 1);
+    const f32 x        = -2.0f + 4.0f * (f32)i / (f32)(GELU_N - 1);
     const f32 x3       = x * x * x;
     const f32 inner    = (f32)GELU_C * (x + (f32)GELU_K * x3);
     const f32 got_f    = (f32)bf16(0.5f * x * (1.0f + tanhf(inner)));
-    const f64 got      = (f64)got_f;
-    const f64 xd       = (f64)x;
-    const f64 expected = 0.5 * xd * (1.0 + tanh(GELU_C * (xd + GELU_K * xd*xd*xd)));
-    const f64 rel      = fabs(expected) > 1e-15
-      ? fabs(got - expected) / fabs(expected)
-      : fabs(got - expected);
+    const f32 expected = 0.5f * x * (1.0f + tanhf(inner));
+    const f64 abs      = fabs((f64)got_f - (f64)expected);
+    const f64 rel      = fabs((f64)expected) > 1e-15
+      ? abs / fabs((f64)expected)
+      : abs;
+    sum_abs += abs;
     sum_rel += rel;
     cnt++;
   }
 
-  const f64 avg_rel = sum_rel / cnt;
   scalar_result r;
-  r.got      = avg_rel;
+  r.got      = sum_rel / cnt;
   r.expected = 0.0;
-  r.abs_err  = avg_rel;
-  r.rel_err  = avg_rel;
+  r.abs_err  = sum_abs / cnt;
+  r.rel_err  = sum_rel / cnt;
 
   return r;
 }

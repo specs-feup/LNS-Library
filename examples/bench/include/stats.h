@@ -2,6 +2,7 @@
 #define __STATS_H__
 
 #include "utils.h"
+#include <lnssim.hpp>
 #include <math.h>
 
 // ---------------------------------------------------------------------------

@@ -17,8 +17,12 @@ struct lns {
   lns(uint_t<n> raw, bool);
   lns(i32 x);
   lns(f32 x);
+  // Convert from a different LNS type
+  template<u8 n2, u8 i2, u8 f2>
+  lns(const lns<n2, i2, f2>& other);
 
   explicit operator f32() const;
+  explicit operator f64() const;
 
   u8       sign()     const;
   int_t<n> exponent() const;
