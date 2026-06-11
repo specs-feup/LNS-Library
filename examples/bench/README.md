@@ -8,7 +8,7 @@ against **BF** (Brain Float / E4M3) at 8-bit and 16-bit widths.
 ## Format definitions
 
 | Format | Bits | Layout | Mantissa bits | Usable range |
-|--------|------|--------|---------------|--------------|
+|--------|------|--------|---------------|--------------| 
 | `lns8`  | 8  | 1 sign · 4 int · 3 frac | 3 | \|x\| ≤ 4 |
 | `bf8`   | 8  | 1 sign · 4 exp · 3 man (E4M3) | 3 | \|x\| ≤ 4 |
 | `lns16` | 16 | 1 sign · 8 int · 7 frac | 7 | \|x\| ≤ 2^16 |
@@ -26,11 +26,13 @@ lookup with no rounding beyond the table's own precision.
 
 ## Ground truth
 
-LNS operations are evaluated against **lns32** (a higher-precision
-log-space accumulator), and BF operations are evaluated against **f32**
-arithmetic.  Each format is therefore judged against a natural
-higher-precision version of itself, giving a fair and symmetric
-comparison.
+Each format family is evaluated against a natural higher-precision version
+of itself, giving a fair and symmetric comparison:
+
+- **LNS formats** (`lns8`, `lns16`, and accumulator variants) are evaluated against **lns32** (a higher-precision log-space accumulator using `math.h` `log2`/`exp2`).
+- **BF formats** (`bf8`, `bf16`, and accumulator variants) are evaluated against **f64** arithmetic.
+
+This pairing ensures that conversion error is accounted for consistently within each family, rather than measuring LNS against an IEEE reference it was never designed to match.
 
 ---
 
@@ -133,15 +135,15 @@ most complete picture.
 ![8-bit absolute heatmap](results/ops_heatmap_lns8_bf8_abs.png)
 
 The 8-bit picture is identical under both relative and absolute error:
-lns8 wins **mul** and **div** across all three bands; bf8 wins
-**round-trip**, **add**, and **sub** across all three bands.  There are
-no ties.
+bf8 wins across all three bands. There are no ties.
 
 The mul result is notable: LNS multiplication is an exact integer
 addition on the fixed-point exponent field, so its relative error comes
-only from the initial quantisation of the operands.  The bf8 mul must
-round a full mantissa product, which with only 3 mantissa bits incurs a
-larger per-operation error.  Division follows the same logic.
+only from the initial quantisation of the operands. However, even
+with bf8 mulrounding a full mantissa product, 
+which with only 3 mantissa bits incurs a
+larger per-operation error. Division follows the same logic,
+although the difference is way smaller.
 
 Round-trip loss for lns8 relative to bf8 reflects the coarser spacing
 of the LNS grid near 1.0 at 8-bit widths; bf8's uniform-ULP spacing in
@@ -203,12 +205,22 @@ exponents grow.
 
 ## Benchmark 2 — numerical tests (`bench_numerical`)
 
-Six algorithm-level tests compare lns16 and bf16 on realistic numerical
+Eight algorithm-level tests compare lns16 and bf16 on realistic numerical
 workloads.  LNS formats are evaluated against lns32 (a higher-precision
 log-space accumulator); BF formats are evaluated against f64.  Winners
 are declared when the relative difference between errors exceeds 5%;
 smaller differences are annotated as ~tie.  The 8-bit formats are
 included for geometric_progression only; they saturate on every other test.
+
+Each lns16 test is run in three accumulator configurations to separate
+the effect of accumulator precision from that of the weight/activation
+format:
+
+- **`lns16`** — lns16 weights and activations, lns16 accumulators (baseline)
+- **`lns16_lns32acc`** — lns16 weights and activations, lns32 accumulators
+- **`lns16_f32acc`** — lns16 weights and activations, fp32 accumulators
+
+The bf16 tests likewise include a **`bf16_f32acc`** variant (fp32 accumulators).
 
 ### Tests
 
@@ -238,6 +250,10 @@ a compound chain of mul, add, and tanh.  The sweep is restricted to
 [−2, 2] so that all outputs fall in (−1.1, 2), safely inside all formats'
 representable range.  avg_rel across all sweep points is reported.
 
+**7. Softmax sum** — numerically stable softmax denominator `Σ exp(x_i - max(x))` over 512 values log-uniform in [0.01, 100].  Exercises exp followed by accumulation; the subtraction of the max keeps operands in a safe range.
+
+**8. RMSNorm denominator** — `sqrt(Σ x_i^2 / N)` over 512 values log-uniform in [0.01, 100], normalised so the expected result is near 1.  Exercises squaring (exact in LNS), accumulation, and square root (exact in LNS).
+
 ---
 
 ## Results — numerical tests
@@ -246,27 +262,29 @@ representable range.  avg_rel across all sweep points is reported.
 
 ![numerical relative error](results/numerical_rel.png)
 
-Both plots show the same seven test groups; the absolute error chart adds
-the 8-bit bars for geometric_progression.  Winners are assessed on
-relative error; the absolute chart is provided for completeness and to
-show the 8-bit picture.
+Both plots show all eight test groups; bars are grouped so that the lns16 base variant and the lns16_lns32acc / lns16_f32acc accumulator variants appear adjacently, and similarly for bf16 and bf16_f32acc.  This makes the accumulator contribution directly visible.  Winners are assessed on relative error; the absolute chart is provided for completeness and to show the 8-bit picture.
 
-| Test | Winner | Notes |
-|------|--------|-------|
-| geometric_progression | ~tie (lns8 / bf8), ~tie (lns16 / bf16) | 100-step accumulation keeps results in range (≈ 4.4) for all formats. The 8-bit pair is a ~tie; lns8 and bf8 show similar relative error. lns16 and bf16 are also within 5% of each other, consistent with the ~tie annotation on the relative plot. |
-| euclidean_norm | ~tie (lns16 / bf16) | Both 16-bit formats land within 5% of each other; lns16 is marginally worse due to accumulated add error over 4096 terms. |
-| alternating_harmonic | ~tie (lns16 / bf16) | Both formats fail catastrophically (rel_err ≈ 1.0) — severe cancellation over 10 000 iterations destroys precision regardless of format. |
-| pi2_over6_fwd | bf16 | Forward accumulation (small increments into large sum) exposes LNS's add weakness; bf16 wins clearly. |
-| pi2_over6_bwd | bf16 | The more favourable backward ordering helps both formats but does not close the gap; bf16 still wins. |
-| sigmoid | bf16 | bf16 wins clearly; LNS's native exp does not overcome the add/div error chain. |
-| gelu | bf16 | bf16 wins clearly; the compound mul/add/tanh chain amplifies LNS's per-op add overhead across every activation evaluation. |
+| Test | Winner (lns16 vs bf16) | Notes |
+|------|------------------------|-------|
+| geometric_progression | ~tie | 100-step pure-multiply chain; both accumulator variants also ~tie. The 8-bit pair is likewise ~tie. |
+| euclidean_norm | ~tie | Both 16-bit formats land within 5% of each other. lns16_lns32acc recovers some of the gap from lns16 baseline. |
+| alternating_harmonic | ~tie | Both formats fail catastrophically (rel_err ≈ 1.0) — severe cancellation destroys precision regardless of format or accumulator. |
+| pi2_over6_fwd | bf16 | Forward accumulation exposes LNS's add weakness; bf16 wins clearly. lns16_f32acc and lns16_lns32acc close the gap significantly. |
+| pi2_over6_bwd | bf16 | The more favourable backward ordering helps both formats but does not close the gap; bf16 still wins. Accumulator variants again reduce the deficit. |
+| sigmoid | bf16 | bf16 wins clearly; LNS's native exp does not overcome the add/div error chain. Accumulator variants provide modest improvement. |
+| gelu | bf16 | bf16 wins clearly; the compound mul/add/tanh chain amplifies LNS's per-op add overhead. |
+| softmax_sum | bf16 | Accumulation-heavy after the exp; bf16's correctly-rounded add dominates. lns16_f32acc and lns16_lns32acc reduce the gap. |
+| rmsnorm_denom | ~tie / lns16 | LNS squaring and square root are both exact; only the sum accumulation differs. lns16_lns32acc and lns16_f32acc bring lns16 to parity or better on this test. |
 
 The numerical results are consistent with the per-band picture: in any
-workload that is dominated by addition or accumulation — which includes
-all six tests here — bf16's correctly-rounded add gives it a durable
-advantage that lns16's exact multiply cannot compensate for.  The one
-domain where lns16 would be expected to win (pure multiply chains) is
-not well represented by these workloads.
+workload dominated by addition or accumulation, bf16's correctly-rounded
+add gives it a durable advantage.  The accumulator variants show that
+this gap is largely attributable to the accumulator precision rather than
+to the weight/activation format: lns16_lns32acc and lns16_f32acc recover
+much of the deficit on accumulation-heavy tests (pi2_over6, softmax_sum,
+rmsnorm_denom), leaving the remaining difference to the weight-format
+contribution.  On pure-multiply chains (geometric_progression) all
+variants tie.
 
 ---
 

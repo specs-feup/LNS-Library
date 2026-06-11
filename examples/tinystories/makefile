@@ -12,11 +12,12 @@ CXXFLAGS  = -std=c++17 -Wall -Werror -I$(LNS_DIR)
 CXXFLAGS += $(DEBUG)
 CXXFLAGS += $(OPT)
 
-SRC_DIR        = .
-TINY_LNS16_SRC = $(SRC_DIR)/tiny/tiny_lns16.cpp
-TINY_BF16_SRC  = $(SRC_DIR)/tiny/tiny_bf16.cpp
-CONV_BF16_SRC  = $(SRC_DIR)/convert/convert_bf16.cpp
-CONV_LNS16_SRC = $(SRC_DIR)/convert/convert_lns16.cpp
+SRC_DIR        					 = .
+TINY_LNS16_LNS32ACC_SRC = $(SRC_DIR)/tiny/tiny_lns16_lns32acc.cpp
+TINY_LNS16_SRC 					 = $(SRC_DIR)/tiny/tiny_lns16.cpp
+TINY_BF16_SRC  					 = $(SRC_DIR)/tiny/tiny_bf16.cpp
+CONV_BF16_SRC  					 = $(SRC_DIR)/convert/convert_bf16.cpp
+CONV_LNS16_SRC 					 = $(SRC_DIR)/convert/convert_lns16.cpp
 
 LNS_TABLES = $(LNS_DIR)/spline/lns_tables
 
@@ -76,10 +77,20 @@ tiny_xf: $(BUILD_TINY)
 	$(CXX) $(CXXFLAGS) -fopenmp -DSPLINE_XF $(TINY_LNS16_SRC) -o $(BUILD_TINY)/tiny_xf -lm
 	@echo "$(GREEN)Build complete → $(BUILD_TINY)/tiny_xf$(RESET)"
 
+tiny_xf_lns32acc: $(BUILD_TINY)
+	@echo "$(BLUE)Compiling tiny with SPLINE_XF...$(RESET)"
+	$(CXX) $(CXXFLAGS) -fopenmp -DSPLINE_XF $(TINY_LNS16_LNS32ACC_SRC) -o $(BUILD_TINY)/tiny_xf_lns32acc -lm
+	@echo "$(GREEN)Build complete → $(BUILD_TINY)/tiny_xf_lns32acc$(RESET)"
+
 tiny_xmb: $(BUILD_TINY)
 	@echo "$(BLUE)Compiling tiny with SPLINE_XMB...$(RESET)"
 	$(CXX) $(CXXFLAGS) -fopenmp -DSPLINE_XMB $(TINY_LNS16_SRC) -o $(BUILD_TINY)/tiny_xmb -lm
 	@echo "$(GREEN)Build complete → $(BUILD_TINY)/tiny_xmb$(RESET)"
+
+tiny_xmb_lns32acc: $(BUILD_TINY)
+	@echo "$(BLUE)Compiling tiny with SPLINE_XMB...$(RESET)"
+	$(CXX) $(CXXFLAGS) -fopenmp -DSPLINE_XMB $(TINY_LNS16_LNS32ACC_SRC) -o $(BUILD_TINY)/tiny_xmb_lns32acc -lm
+	@echo "$(GREEN)Build complete → $(BUILD_TINY)/tiny_xmb_lns32acc$(RESET)"
 
 tiny_bf16: $(BUILD_TINY)
 	@echo "$(BLUE)Compiling tiny with bf16...$(RESET)"
@@ -173,26 +184,50 @@ run_xf_42M: tiny_xf
 	@echo "$(BLUE)Running tiny_xf — stories42M...$(RESET)"
 	$(BUILD_TINY)/tiny_xf $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_42M_LNS_XF) -z $(TOKENIZER_LNS_XF)
 
+run_xf_lns32acc_42M: tiny_xf_lns32acc
+	@echo "$(BLUE)Running tiny_xf_lns32acc — stories42M...$(RESET)"
+	$(BUILD_TINY)/tiny_xf_lns32acc $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_42M_LNS_XF) -z $(TOKENIZER_LNS_XF)
+
 run_xf_15M: tiny_xf
 	@echo "$(BLUE)Running tiny_xf — stories15M...$(RESET)"
 	$(BUILD_TINY)/tiny_xf $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_15M_LNS_XF) -z $(TOKENIZER_LNS_XF)
 
+run_xf_lns32acc_15M: tiny_xf_lns32acc
+	@echo "$(BLUE)Running tiny_xf_lns32acc — stories15M...$(RESET)"
+	$(BUILD_TINY)/tiny_xf_lns32acc $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_15M_LNS_XF) -z $(TOKENIZER_LNS_XF)
+
 run_xf_260K: tiny_xf
 	@echo "$(BLUE)Running tiny_xf — stories260K...$(RESET)"
 	$(BUILD_TINY)/tiny_xf $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_260K_LNS_XF) -z $(TOKENIZER_260K_LNS_XF)
+
+run_xf_lns32acc_260K: tiny_xf_lns32acc
+	@echo "$(BLUE)Running tiny_xf_lns32acc — stories260K...$(RESET)"
+	$(BUILD_TINY)/tiny_xf_lns32acc $(LNS_TABLES)/lns16_q8_7_xf.lns $(MODEL_260K_LNS_XF) -z $(TOKENIZER_260K_LNS_XF)
 
 # ---------- run (lns16 XMB) ----------
 run_xmb_42M: tiny_xmb
 	@echo "$(BLUE)Running tiny_xmb — stories42M...$(RESET)"
 	$(BUILD_TINY)/tiny_xmb $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_42M_LNS_XMB) -z $(TOKENIZER_LNS_XMB)
 
+run_xmb_ln32acc_42M: tiny_xmb_lns32acc
+	@echo "$(BLUE)Running tiny_xmb_lns32acc — stories42M...$(RESET)"
+	$(BUILD_TINY)/tiny_xmb_lns32acc $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_42M_LNS_XMB) -z $(TOKENIZER_LNS_XMB)
+
 run_xmb_15M: tiny_xmb
 	@echo "$(BLUE)Running tiny_xmb — stories15M...$(RESET)"
 	$(BUILD_TINY)/tiny_xmb $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_15M_LNS_XMB) -z $(TOKENIZER_LNS_XMB)
 
+run_xmb_lns32acc_15M: tiny_xmb_lns32acc
+	@echo "$(BLUE)Running tiny_xmb_lns32acc — stories15M...$(RESET)"
+	$(BUILD_TINY)/tiny_xmb_lns32acc $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_15M_LNS_XMB) -z $(TOKENIZER_LNS_XMB)
+
 run_xmb_260K: tiny_xmb
 	@echo "$(BLUE)Running tiny_xmb — stories260K...$(RESET)"
 	$(BUILD_TINY)/tiny_xmb $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_260K_LNS_XMB) -z $(TOKENIZER_260K_LNS_XMB)
+
+run_xmb_lns32acc_260K: tiny_xmb_lns32acc
+	@echo "$(BLUE)Running tiny_xmb_lns32acc — stories260K...$(RESET)"
+	$(BUILD_TINY)/tiny_xmb_lns32acc $(LNS_TABLES)/lns16_q8_7_xmb.lns $(MODEL_260K_LNS_XMB) -z $(TOKENIZER_260K_LNS_XMB)
 
 # ---------- run (bf16) ----------
 run_bf16_42M: tiny_bf16

@@ -34,12 +34,15 @@ struct lns {
   lns operator* (const lns other) const;
   lns operator/ (const lns other) const;
 
-  lns root(const u8 k) const;
-  lns sqrt() const;
-  lns exp()  const;
-  lns sinh() const;
-  lns cosh() const;
-  lns tanh() const;
+  lns power2_pow(const u8 k)  const;
+  lns power2_root(const u8 k) const;
+
+  lns square() const;
+  lns sqrt()   const;
+  lns exp()    const;
+  lns sinh()   const;
+  lns cosh()   const;
+  lns tanh()   const;
 
   lns& operator+=(const lns other);
   lns& operator-=(const lns other);

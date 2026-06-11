@@ -11,6 +11,7 @@ Reads:  results_dir/results.csv
 Writes: results_dir/ops_avg_rel.png
         results_dir/ops_avg_abs.png
         results_dir/numerical_rel.png
+        results_dir/numerical_abs.png
         results_dir/ops_heatmap_lns8_bf8_rel.png
         results_dir/ops_heatmap_lns8_bf8_abs.png
         results_dir/ops_heatmap_lns16_bf16_rel.png
@@ -42,17 +43,36 @@ ALPHA     = 0.01   # Mann-Whitney significance threshold for heatmap
 NUM_TIE   = 0.05   # relative-difference threshold for numerical tie
 
 FMT_COLOR = {
-    "lns8":  "#2563eb",
-    "bf8":   "#dc2626",
-    "lns16": "#16a34a",
-    "bf16":  "#ea580c",
+    "lns8":          "#2563eb",
+    "bf8":           "#dc2626",
+    "lns16":         "#16a34a",
+    "lns16_lns32acc":"#15803d",   # darker green for the lns32-acc variant
+    "lns16_f32acc":  "#126614",   # darker green for the f32-acc variant
+    "bf16":          "#ea580c",
+    "bf16_f32acc":   "#c2410c",   # darker orange for the f32-acc variant
 }
 FMT_MARKER = {
-    "lns8":  "o",
-    "bf8":   "s",
-    "lns16": "^",
-    "bf16":  "D",
+    "lns8":          "o",
+    "bf8":           "s",
+    "lns16":         "^",
+    "lns16_lns32acc":"v",
+    "lns16_f32acc":  "f",
+    "bf16":          "D",
+    "bf16_f32acc":   "P",
 }
+FMT_HATCH = {
+    "lns8":          "",
+    "bf8":           "",
+    "lns16":         "",
+    "lns16_lns32acc":"//",
+    "lns16_f32acc":  ".",
+    "bf16":          "",
+    "bf16_f32acc":   "//",
+}
+
+# Canonical display order for the numerical bar chart
+NUMERICAL_FMT_ORDER = ["lns8", "bf8", "lns16", "lns16_lns32acc", "lns16_f32acc", "bf16", "bf16_f32acc"]
+
 OP_ORDER  = ["rt", "mul", "div", "add", "sub"]
 OP_LABELS = {"rt": "round-trip", "mul": "mul", "div": "div",
              "add": "add", "sub": "sub"}
@@ -76,11 +96,6 @@ def load_csv(path):
 
 
 def load_samples(path):
-    """
-    Returns dict keyed by (fmt, band, op) ->
-        {"abs": np.ndarray, "rel": np.ndarray}
-    Returns {} if file is missing.
-    """
     if not os.path.exists(path):
         return {}
 
@@ -117,7 +132,6 @@ def safe_float(v):
     try:
         x = float(v)
         return x if math.isfinite(x) else None
-
     except (ValueError, TypeError):
         return None
 
@@ -130,10 +144,6 @@ def save(fig, name):
 
 
 def compute_global_ylims(ops_rows, metric_col, pairs):
-    """
-    Compute a single (ymin, ymax) range across all formats/ops/bands for a
-    given metric column so that all subplots share a consistent y-axis scale.
-    """
     all_vals = []
     for pair_fmts in [fmts for _, fmts in pairs]:
         for fmt in pair_fmts:
@@ -153,17 +163,14 @@ def plot_ops_metric(ops_rows, metric_col, metric_label, filename_suffix):
         ("16-bit", ["lns16", "bf16"]),
     ]
 
-    # Compute consistent y-axis limits across all subplots
     ymin, ymax = compute_global_ylims(ops_rows, metric_col, pairs)
     if ymin is not None:
-        # Add a small margin in log space
         log_margin = 0.15
         ymin_plot = 10 ** (math.log10(ymin) - log_margin)
         ymax_plot = 10 ** (math.log10(ymax) + log_margin)
     else:
         ymin_plot = ymax_plot = None
 
-    # Taller figure and more horizontal space to avoid label overlap
     fig, axes = plt.subplots(
         len(OP_ORDER), len(pairs),
         figsize=(18, 4.5 * len(OP_ORDER)),
@@ -198,7 +205,6 @@ def plot_ops_metric(ops_rows, metric_col, metric_label, filename_suffix):
                             marker=FMT_MARKER.get(fmt, "o"),
                             linewidth=1.6, markersize=5)
 
-            # Apply consistent y-axis limits
             if ymin_plot is not None:
                 ax.set_ylim(ymin_plot, ymax_plot)
 
@@ -217,10 +223,6 @@ def plot_ops_metric(ops_rows, metric_col, metric_label, filename_suffix):
 
 
 def plot_ops_heatmap(ops_rows, samples, pair_label, fmts, filename, metric_key):
-    """
-    metric_key: "rel" for avg_rel, "abs" for avg_abs.
-    Produces one heatmap comparing lns vs bf on a single error metric.
-    """
     lns_fmt, bf_fmt = fmts
     metric_col = f"avg_{metric_key}"
 
@@ -259,19 +261,17 @@ def plot_ops_heatmap(ops_rows, samples, pair_label, fmts, filename, metric_key):
                 if sl is not None and sb is not None and len(sl) and len(sb):
                     n1, n2 = len(sl), len(sb)
                     u_stat, p = scipy_stats.mannwhitneyu(sl, sb, alternative="two-sided")
-                    rank_biserial_r = 1 - (2 * u_stat) / (n1 * n2)  # range: -1 to 1
+                    rank_biserial_r = 1 - (2 * u_stat) / (n1 * n2)
                     print(f"  [wilcoxon] {lns_fmt} vs {bf_fmt} | {op} | {band} | p={p:.4f} | r={rank_biserial_r:.3f} | N={n1},{n2}")
 
                     if p >= ALPHA or abs(rank_biserial_r) < NUM_TIE:
-                        data[ri, ci] = 0.5  # tie
+                        data[ri, ci] = 0.5
                         continue
-
                 else:
                     print(f"  [wilcoxon] MISSING samples for {lns_fmt}/{bf_fmt} | {op} | {band} — falling back to pointwise")
 
             data[ri, ci] = 0.0 if vl <= vb else 1.0
 
-    # Larger figure: wider per band, taller per op to avoid label overlap
     fig_w = max(10, n_band * 1.4)
     fig_h = n_ops * 1.4 + 2.5
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
@@ -305,7 +305,7 @@ def plot_ops_heatmap(ops_rows, samples, pair_label, fmts, filename, metric_key):
     ax.legend(
         handles=legend_handles,
         loc="upper right",
-        bbox_to_anchor=(1.0, -0.12),   # below the x-axis labels
+        bbox_to_anchor=(1.0, -0.12),
         ncol=3,
         fontsize=10,
         framealpha=0.9,
@@ -323,38 +323,42 @@ def plot_ops_heatmap(ops_rows, samples, pair_label, fmts, filename, metric_key):
     save(fig, filename)
 
 
-def plot_numerical_rel(num_rows):
+def plot_numerical(num_rows, error_col, ylabel, title_suffix, filename):
+    """
+    Generic numerical bar chart for either rel_err or abs_err.
+
+    lns16 and lns16_lns32acc bars are placed adjacently for direct comparison,
+    as are bf16 and bf16_f32acc. Improvement ratios are printed inside the
+    acc-variant bars.
+    """
     if not num_rows:
         print("  no numerical rows found — skipping")
         return
 
     tests = collections.OrderedDict()
     for row in num_rows:
-        test    = row.get("test_name", "").strip()
-        fmt     = row.get("format",    "").strip()
-        rel_err = safe_float(row.get("rel_err", ""))
+        test = row.get("test_name", "").strip()
+        fmt  = row.get("format",    "").strip()
+        val  = safe_float(row.get(error_col, ""))
 
-        if test and fmt and rel_err is not None:
+        if test and fmt and val is not None:
             if test not in tests:
                 tests[test] = {}
-            if fmt not in tests[test] or rel_err < tests[test][fmt]:
-                tests[test][fmt] = rel_err
+            if fmt not in tests[test] or val < tests[test][fmt]:
+                tests[test][fmt] = val
 
     test_names = list(tests.keys())
-    fmts_seen  = [f for f in ["lns8", "bf8", "lns16", "bf16"]
+    fmts_seen  = [f for f in NUMERICAL_FMT_ORDER
                   if any(f in tests[t] for t in test_names)]
 
     if not fmts_seen:
         print("  no numerical data — skipping")
         return
 
-    pairs = [("lns8", "bf8"), ("lns16", "bf16")]
-
     x     = np.arange(len(test_names))
     width = 0.8 / len(fmts_seen)
 
-    # Wider figure and taller to accommodate rotated labels
-    fig, ax = plt.subplots(figsize=(max(12, len(test_names) * 1.8), 6))
+    fig, ax = plt.subplots(figsize=(max(14, len(test_names) * 2.0), 6))
 
     for i, fmt in enumerate(fmts_seen):
         vals   = [tests[t].get(fmt, float("nan")) for t in test_names]
@@ -362,14 +366,19 @@ def plot_numerical_rel(num_rows):
         ax.bar(x + offset, vals, width * 0.9,
                label=fmt,
                color=FMT_COLOR.get(fmt, "grey"),
-               alpha=0.85)
+               hatch=FMT_HATCH.get(fmt, ""),
+               alpha=0.85,
+               edgecolor="white" if not FMT_HATCH.get(fmt) else "#333333")
 
-    for lns_f, bf_f in pairs:
+    # tie annotations between lns/bf baseline pairs
+    pairs_for_tie = [("lns8", "bf8"), ("lns16", "bf16")]
+    tie: bool = False
+    for lns_f, bf_f in pairs_for_tie:
         if lns_f not in fmts_seen or bf_f not in fmts_seen:
             continue
 
-        lns_i  = fmts_seen.index(lns_f)
-        bf_i   = fmts_seen.index(bf_f)
+        lns_i = fmts_seen.index(lns_f)
+        bf_i  = fmts_seen.index(bf_f)
 
         for ti, test in enumerate(test_names):
             vl = tests[test].get(lns_f)
@@ -377,113 +386,52 @@ def plot_numerical_rel(num_rows):
 
             if vl is None or vb is None:
                 continue
-
             lo = min(vl, vb)
             if lo == 0:
                 continue
 
             if abs(vl - vb) / lo < NUM_TIE:
+                tie = True
+
                 bar_h  = max(vl, vb)
                 y_line = bar_h * 1.15
-                xl     = x[ti] + (lns_i - len(fmts_seen) / 2.0 + 0.5) * width
-                xr     = x[ti] + (bf_i  - len(fmts_seen) / 2.0 + 0.5) * width
+
+                xl = x[ti] + (lns_i - len(fmts_seen) / 2.0 + 0.5) * width
+                xr = x[ti] + (bf_i  - len(fmts_seen) / 2.0 + 0.5) * width
+
                 ax.annotate("", xy=(xr, y_line), xytext=(xl, y_line),
                             arrowprops=dict(arrowstyle="-", color="black", lw=1.2))
                 ax.text((xl + xr) / 2, y_line * 1.05, "~tie",
                         ha="center", va="bottom", fontsize=7)
 
-    ax.set_yscale("log")
-    ax.set_xticks(x)
-    ax.set_xticklabels(test_names, rotation=35, ha="right", fontsize=9)
-    ax.set_ylabel("relative error  (lower = better)", fontsize=10)
-    ax.set_title(
-        f"Numerical tests — relative error by format\n"
-        f"(~tie = rel. diff < {NUM_TIE:.0%})",
-        fontsize=12,
-        pad=10,
-    )
-    ax.legend(fontsize=9)
-    ax.grid(True, axis="y", which="major", alpha=0.3)
-    ax.yaxis.set_major_formatter(ticker.LogFormatterMathtext())
-    fig.tight_layout(pad=2.0)
-    save(fig, "numerical_rel.png")
-
-
-def plot_numerical_abs(num_rows):
-    if not num_rows:
-        print("  no numerical rows found — skipping")
-        return
-
-    tests = collections.OrderedDict()
-    for row in num_rows:
-        test    = row.get("test_name", "").strip()
-        fmt     = row.get("format",    "").strip()
-        abs_err = safe_float(row.get("abs_err", ""))
-
-        if test and fmt and abs_err is not None:
-            if test not in tests:
-                tests[test] = {}
-            if fmt not in tests[test] or abs_err < tests[test][fmt]:
-                tests[test][fmt] = abs_err
-
-    test_names = list(tests.keys())
-    fmts_seen  = [f for f in ["lns8", "bf8", "lns16", "bf16"]
-                  if any(f in tests[t] for t in test_names)]
-
-    if not fmts_seen:
-        print("  no numerical data — skipping")
-        return
-
-    pairs = [("lns8", "bf8"), ("lns16", "bf16")]
-
-    x     = np.arange(len(test_names))
-    width = 0.8 / len(fmts_seen)
-
-    fig, ax = plt.subplots(figsize=(max(12, len(test_names) * 1.8), 6))
-
-    for i, fmt in enumerate(fmts_seen):
-        vals   = [tests[t].get(fmt, float("nan")) for t in test_names]
-        offset = (i - len(fmts_seen) / 2.0 + 0.5) * width
-        ax.bar(x + offset, vals, width * 0.9,
-               label=fmt,
-               color=FMT_COLOR.get(fmt, "grey"),
-               alpha=0.85)
-
-    for lns_f, bf_f in pairs:
-        if lns_f not in fmts_seen or bf_f not in fmts_seen:
+    # improvement ratio printed inside the acc-variant bars
+    acc_pairs = [("lns16", "lns16_lns32acc"), ("bf16", "bf16_f32acc")]
+    for base_f, acc_f in acc_pairs:
+        if base_f not in fmts_seen or acc_f not in fmts_seen:
             continue
 
-        lns_i  = fmts_seen.index(lns_f)
-        bf_i   = fmts_seen.index(bf_f)
+        acc_i = fmts_seen.index(acc_f)
 
         for ti, test in enumerate(test_names):
-            vl = tests[test].get(lns_f)
-            vb = tests[test].get(bf_f)
-
-            if vl is None or vb is None:
+            v_base = tests[test].get(base_f)
+            v_acc  = tests[test].get(acc_f)
+            if v_base is None or v_acc is None or v_base == 0:
                 continue
 
-            lo = min(vl, vb)
-            if lo == 0:
-                continue
-
-            if abs(vl - vb) / lo < NUM_TIE:
-                bar_h  = max(vl, vb)
-                y_line = bar_h * 1.15
-                xl     = x[ti] + (lns_i - len(fmts_seen) / 2.0 + 0.5) * width
-                xr     = x[ti] + (bf_i  - len(fmts_seen) / 2.0 + 0.5) * width
-                ax.annotate("", xy=(xr, y_line), xytext=(xl, y_line),
-                            arrowprops=dict(arrowstyle="-", color="black", lw=1.2))
-                ax.text((xl + xr) / 2, y_line * 1.05, "~tie",
-                        ha="center", va="bottom", fontsize=7)
+            if v_acc < v_base * (1 - NUM_TIE):
+                ratio = v_base / v_acc
+                x_bar = x[ti] + (acc_i - len(fmts_seen) / 2.0 + 0.5) * width
+                ax.text(x_bar, v_acc * 1.3, f"×{ratio:.1f}",
+                        ha="center", va="top", fontsize=7,
+                        color="black", fontweight="bold")
 
     ax.set_yscale("log")
     ax.set_xticks(x)
     ax.set_xticklabels(test_names, rotation=35, ha="right", fontsize=9)
-    ax.set_ylabel("absolute error  (lower = better)", fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
     ax.set_title(
-        f"Numerical tests — absolute error by format\n"
-        f"(~tie = rel. diff < {NUM_TIE:.0%})",
+        f"Numerical tests — {title_suffix}\n"
+        f"(~tie = rel. diff < {NUM_TIE:.0%}; ×N on top of bar = acc-variant improvement (base variant / acc variant))",
         fontsize=12,
         pad=10,
     )
@@ -491,7 +439,7 @@ def plot_numerical_abs(num_rows):
     ax.grid(True, axis="y", which="major", alpha=0.3)
     ax.yaxis.set_major_formatter(ticker.LogFormatterMathtext())
     fig.tight_layout(pad=2.0)
-    save(fig, "numerical_abs.png")
+    save(fig, filename)
 
 
 def main():
@@ -513,11 +461,9 @@ def main():
 
     print("generating plots...")
 
-    # Line plots — consistent y-scale across all subplots within each metric
     plot_ops_metric(ops_rows, "avg_rel", "avg relative error", "avg_rel")
     plot_ops_metric(ops_rows, "avg_abs", "avg absolute error", "avg_abs")
 
-    # Heatmaps — one per (pair × metric), no duplicate calls
     for pair_label, fmts, slug in [
         ("8-bit  lns8 vs bf8",   ["lns8",  "bf8"],  "lns8_bf8"),
         ("16-bit  lns16 vs bf16", ["lns16", "bf16"], "lns16_bf16"),
@@ -527,9 +473,17 @@ def main():
         plot_ops_heatmap(ops_rows, samples, pair_label, fmts,
                          f"ops_heatmap_{slug}_abs.png", "abs")
 
-    plot_numerical_rel(num_rows)
-    plot_numerical_abs(num_rows)
+    plot_numerical(num_rows, "rel_err",
+                   "relative error  (lower = better)",
+                   "relative error by format",
+                   "numerical_rel.png")
+    plot_numerical(num_rows, "abs_err",
+                   "absolute error  (lower = better)",
+                   "absolute error by format",
+                   "numerical_abs.png")
+
     print("done.")
+
 
 if __name__ == "__main__":
     main()

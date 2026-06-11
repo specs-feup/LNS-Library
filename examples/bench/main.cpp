@@ -56,7 +56,7 @@ i32 main(i32 argc, const char* argv[]) {
     usage(argv[0]);
     return EXIT_FAILURE;
   }
-
+ 
   const char* lns8_path  = argv[1];
   const char* lns16_path = argv[2];
   u32         n_samples  = (argc > 3) ? (u32)atoi(argv[3]) : DEFAULT_N;

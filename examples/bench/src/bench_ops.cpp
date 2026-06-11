@@ -52,7 +52,7 @@ static format_stats run_lns8(u32 n, f32 lo, f32 hi) {
 
   for (u32 k = 0; k < n; k++) {
     const f32 a = SB8(lo, hi);
-    stats_update(&fs.rt, (f32)lns8(a), a);
+    stats_update(&fs.rt, (f32)(lns32)lns8(a), a);
   }
 
   for (u32 k = 0; k < n; ) {

@@ -1,12 +1,12 @@
 #ifndef __LNS_SIM_INL__
 #define __LNS_SIM_INL__
 
-#define LNS_ZERO(n)                         (1 << (n - 2))
-#define F32_SIGN(raw)                       ((raw >> 31) & 1)
-#define F32_EXP(raw)                        ((raw >> 23) & 0xFF)
-#define F32_FRAC(raw)                       (raw & 0x7FFFFF)
-#define F32_FRAC_U32_TO_FLOAT(frac)         ((f64)frac / (f64)(1 << 23))
-#define F32_TO_LNS_FRAC(mantissa, n, prec)  ((uint_t<n>)(lns_f2l_compute(mantissa) >> (n - 1 - prec)))
+#define LNS_ZERO(n)                     (1 << (n - 2))
+#define F32_SIGN(raw)                   ((raw >> 31) & 1)
+#define F32_EXP(raw)                    ((raw >> 23) & 0xFF)
+#define F32_FRAC(raw)                   (raw & 0x7FFFFF)
+#define F32_FRAC_U32_TO_FLOAT(frac)     ((f64)frac / (f64)(1 << 23))
+#define F32_TO_LNS_FRAC(mantissa, n, f) ((uint_t<n>)(lns_f2l_compute(mantissa) >> (n - 1 - f)))
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f>::lns()
@@ -35,6 +35,12 @@ lns<n,i,f>::lns(f32 x) {
   const uint_t<n> lns_sign       = F32_SIGN(raw);
   const int_t<n>  lns_exp_int    = F32_EXP(raw) - 127;
   const u32       float_exp_frac = F32_FRAC(raw);
+  /*
+  printf(
+    "x=%.5f or 0x%08X, sign=%d, (exp - 127)=(%d, 0x%08X), frac=0x%08X\n",
+    x,(u32)x, lns_sign, lns_exp_int, lns_exp_int, float_exp_frac
+  );
+  */
 
   int_t<n> float_mantissa = 0;
   if constexpr (n == 64) {
@@ -48,15 +54,23 @@ lns<n,i,f>::lns(f32 x) {
   }
 
   const uint_t<n> lns_exp_frac = F32_TO_LNS_FRAC(float_mantissa, n, f);
+  /*
+  printf(
+    "x=%.5f or 0x%08X, sign=%d, (exp - 127)=(%d, 0x%08X), frac=0x%08X\n",
+    x, (u32)x, lns_sign, lns_exp_int, lns_exp_int, lns_exp_frac
+  );
+  */
 
   constexpr uint_t<n>
-    lns_exp_int_mask  = ((1 << (n - f - 1)) - 1),
+    lns_exp_int_mask  = ((1 << (n - 1 - f)) - 1),
     lns_exp_frac_mask = (1 << f) - 1;
 
   bits =
     (lns_sign << (n - 1)) |
     ((lns_exp_int & lns_exp_int_mask) << f) |
     (lns_exp_frac & lns_exp_frac_mask);
+
+  // printf("bits=0x%08X\n", bits);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -68,17 +82,20 @@ lns<n,i,f>::operator f32() const {
 
   const uint_t<n> f32_exp  = (exponent() >> f) + 127;
   const uint_t<n> exp_frac = exponent() & ((1 << f) - 1);
+  /*
+  printf(
+    "f32_exp=(%d, 0x%08X), exp_frac=0x%08X\n",
+    f32_exp, f32_exp, exp_frac
+  );
+  */
   const int_t<n>  mantissa = lns_l2f_compute(exp_frac << (n - 1 - f));
 
   u32 f32_frac = 0;
-  if constexpr (n >= 32) {
-    if constexpr (f <= 23)
-      f32_frac = (u32)mantissa << (23 - (f - 1));
-    else
-      f32_frac = (u32)mantissa >> ((f - 1) - 23);
+  if constexpr (n - 1 >= 23) {
+    f32_frac = (u32)((u64)mantissa >> (n - 1 - 23));
   }
   else {
-    f32_frac = (u32)mantissa << (23 - (n - 1));
+    f32_frac = (u32)((u64)mantissa << (23 - (n - 1)));
   }
 
   const u32 f32_bits =
@@ -104,21 +121,36 @@ lns<n, i, f>::lns(const lns<n2, i2, f2>& other) {
     return;
   }
 
-  int_t<n> dst_exp;
-  if constexpr (f >= f2)
-    dst_exp = (int_t<n>)other.exponent() << (f - f2);
+  const int_t<n2> raw_mag = other.bits & ((uint_t<n2>(1) << (n2 - 1)) - 1);
+
+  int_t<n> dst_mag;
+  if constexpr (f >= f2) {
+    dst_mag = (int_t<n>)raw_mag << (f - f2);
+
+    const bool sign_extend = (raw_mag >> (n2 - 2)) & 1;
+    if (sign_extend) {
+      constexpr int_t<n> sign_extention = (uint_t<n>)(~0) << (f - f2 + n2 - 1);
+      dst_mag |= sign_extention & ((uint_t<n>(1) << (n - 1)) - 1);
+    }
+  }
   else
-    dst_exp = (int_t<n>)(other.exponent() >> (f2 - f));
+    dst_mag = (int_t<n>)(raw_mag >> (f2 - f)) & ((uint_t<n>(1) << (n - 1)) - 1);
 
-  const int_t<n> max_exp = (int_t<n>(1) << (n - 2)) - 1;
-  if (dst_exp > max_exp)
-    dst_exp = max_exp;
-  if (dst_exp < -max_exp)
-    dst_exp = -max_exp;
+  if (dst_mag == LNS_ZERO(n))
+    dst_mag++; // avoid zero sentinel
 
-  bits = (uint_t<n>)dst_exp & ((uint_t<n>(1) << (n - 1)) - 1);
-  if (other.sign())
-    bits |= (uint_t<n>(1) << (n - 1));
+  bits = (other.sign() << (n - 1)) ^ dst_mag;
+
+  /*
+  if constexpr (n == 8 && n2 == 32) {
+    other.debug_print("other");
+    printf(
+      "sign_extend=%d, raw_mag=0x%02X, dst_mag=(raw_mag << %d)=0x%08X\n",
+      sign_extend, raw_mag, f - f2, dst_mag
+    );
+    this->debug_print("new");
+  }
+  */
 }
 
 template<u8 n, u8 i, u8 f>
@@ -150,7 +182,7 @@ lns<n,i,f> lns<n,i,f>::operator+(const lns other) const {
   int_t<n> result = 0;
 
   if (diff > 0) {
-    exp1  ^= exp2; exp2  ^= exp1; exp1  ^= exp2;
+    exp1  ^= exp2;  exp2  ^= exp1;  exp1  ^= exp2;
     sign1 ^= sign2; sign2 ^= sign1; sign1 ^= sign2;
     diff  *= -1;
   }
@@ -160,7 +192,7 @@ lns<n,i,f> lns<n,i,f>::operator+(const lns other) const {
     return lns(LNS_ZERO(n), false);
 
   result  = exp1 + lns_add_and_sub_compute(use_add, diff);
-  result &= (uint_t<n>)(1 << (n - 1)) - 1;
+  result &= (uint_t<n>)(1u << (n - 1)) - 1;
   result |= sign1 << (n - 1);
 
   return lns((uint_t<n>)result, false);
@@ -207,9 +239,19 @@ lns<n,i,f> lns<n,i,f>::operator/(const lns other) const {
 }
 
 template<u8 n, u8 i, u8 f>
-lns<n,i,f> lns<n,i,f>::root(const u8 k) const {
+lns<n,i,f> lns<n,i,f>::power2_pow(const u8 k) const {
+  return lns((exponent() << k) & ((1 << (n - 1)) - 1), false);
+}
+
+template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::power2_root(const u8 k) const {
   assert(!sign());
   return lns((exponent() >> k) & ((1 << (n - 1)) - 1), false);
+}
+
+template<u8 n, u8 i, u8 f>
+lns<n,i,f> lns<n,i,f>::square() const {
+  return lns((exponent() << 1) & ((1 << (n - 1)) - 1), false);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -305,8 +347,10 @@ void lns<n,i,f>::print_bin() const {
   printf("0b");
   for (i16 k = n - 1; k >= 0; k--) {
     printf("%d", (bits >> k) & 1);
-    if (k == n - 1) printf("_");
-    if (k == f)   printf(".");
+    if (k == n - 1)
+      printf("_");
+    if (k == f)
+      printf(".");
   }
 }
 
@@ -354,7 +398,14 @@ int_t<n> lns<n,i,f>::lns_f2l_compute(const int_t<n> mantissa) const {
       m          = (f64)mantissa / (f64)(1ull << (n - 1)),
       correction = log2(1.0 + m);
 
-    return (int_t<n>)(correction * (f64)(1 << f));
+    /*
+    printf(
+      "m=%.5f or 0x%08X, correction=%.5f or 0x%08X\n",
+      m, mantissa, correction, (int_t<n>)(correction * (f64)(1ull << (n - 1))) 
+    );
+    */
+
+    return (int_t<n>)(correction * (f64)(1ull << (n - 1)));
   }
   else {
     fprintf(stderr, "[ERROR]: LNS bit format not implemented");
@@ -396,7 +447,14 @@ int_t<n> lns<n,i,f>::lns_l2f_compute(const int_t<n> lns_f) const {
       frac     = (f64)lns_f / (f64)(1ull << (n - 1)),
       mantissa = pow(2, frac) - 1;
 
-    return (int_t<n>)(mantissa * (f64)(1 << f));
+    /*
+    printf(
+      "frac=%.5f or 0x%08X, mantissa=%.5f or 0x%08X\n",
+      frac, lns_f, mantissa, (int_t<n>)(mantissa * (f64)(1ull << (n - 1))) 
+    );
+    */ 
+
+    return (int_t<n>)(mantissa * (f64)(1ull << (n - 1)));
   }
   else {
     fprintf(stderr, "[ERROR]: LNS bit format not implemented");
@@ -434,7 +492,7 @@ int_t<n> lns<n,i,f>::lns_add_and_sub_compute(const bool use_add, const int_t<n> 
     return lns16_lut_compute (use_add ? *lns16_lut_add : *lns16_lut_sub, diff, f);
   }
   else if constexpr (n == 32 || n == 64) {
-    const f64 z = (f64)diff / (f64)(1 << f);
+    const f64 z = (f64)diff / (f64)(1ull << f);
 
     f64 correction;
     // for very negative z (z < -50), 2^z underflows to 0, correction → 0
@@ -444,7 +502,7 @@ int_t<n> lns<n,i,f>::lns_add_and_sub_compute(const bool use_add, const int_t<n> 
       correction = (z < -50.0) ? 0.0 : log2(1.0 - pow(2.0, z));
     }
 
-    return (int_t<n>)(correction * (f64)(1 << f));
+    return (int_t<n>)(correction * (f64)(1ull << f));
   }
   else {
     fprintf(stderr, "[ERROR]: LNS bit format not implemented");
