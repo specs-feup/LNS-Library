@@ -10,11 +10,12 @@ static FILE* g_csv     = NULL;
 static FILE* g_samples = NULL;
 
 typedef struct {
-  char fmt[16];
-  char band[32];
-  char op[8];
-  u64  data_offset;
-  u32  count;
+  char 
+    fmt[16],
+    band[32],
+    op[8];
+  u64 data_offset;
+  u32 count;
 } sample_entry;
 
 static sample_entry* g_index    = NULL;
@@ -47,14 +48,17 @@ void csv_open(const char* results_dir) {
   fprintf(g_csv,
     "test_kind,format,band,op,"
     "avg_rel,max_rel,avg_abs,max_abs,"
-    "test_name,variant,got,expected,abs_err,rel_err\n"
+    "test_name,variant,got,abs_err,rel_err\n"
   );
 
   samples_open(results_dir);
 }
 
 void csv_close(void) {
-  if (g_csv) { fclose(g_csv); g_csv = NULL; }
+  if (g_csv) {
+    fclose(g_csv);
+    g_csv = NULL;
+  }
   samples_close();
 }
 
@@ -101,7 +105,7 @@ void csv_write_ops(
   fprintf(g_csv,
     "ops,%s,\"%s\",%s,"
     "%.8e,%.8e,%.8e,%.8e,"
-    ",,,,,,\n",
+    ",,,,,\n",
     fmt_name, band_label, op_name,
     (double)stats_avg_rel(s), (double)s->max_rel_err,
     (double)stats_avg_abs(s), (double)s->max_abs_err
@@ -138,9 +142,9 @@ void csv_write_scalar(
   fprintf(g_csv,
     "numerical,%s,,,,,,,"
     "%s,%s,"
-    "%.15e,%.15e,%.15e,%.15e\n",
+    "%.15e,%.15e,%.15e\n",
     fmt_name,
     test_name, variant,
-    r->got, r->expected, r->abs_err, r->rel_err
+    r->got, r->abs_err, r->rel_err
   );
 }

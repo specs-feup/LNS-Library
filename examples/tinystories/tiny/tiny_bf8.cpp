@@ -31,40 +31,40 @@ typedef struct {
 
 typedef struct {
   // token embedding table
-  bf16* token_embedding_table;  // (vocab_size, dim)
+  bf8* token_embedding_table;  // (vocab_size, dim)
   // weights for rmsnorms
-  bf16* rms_att_weight; // (layer, dim) rmsnorm weights
-  bf16* rms_ffn_weight; // (layer, dim)
+  bf8* rms_att_weight; // (layer, dim) rmsnorm weights
+  bf8* rms_ffn_weight; // (layer, dim)
   // weights for matmuls. note dim == n_heads * head_size
-  bf16* wq; // (layer, dim, n_heads * head_size)
-  bf16* wk; // (layer, dim, n_kv_heads * head_size)
-  bf16* wv; // (layer, dim, n_kv_heads * head_size)
-  bf16* wo; // (layer, n_heads * head_size, dim)
+  bf8* wq; // (layer, dim, n_heads * head_size)
+  bf8* wk; // (layer, dim, n_kv_heads * head_size)
+  bf8* wv; // (layer, dim, n_kv_heads * head_size)
+  bf8* wo; // (layer, n_heads * head_size, dim)
   // weights for ffn
-  bf16* w1; // (layer, hidden_dim, dim)
-  bf16* w2; // (layer, dim, hidden_dim)
-  bf16* w3; // (layer, hidden_dim, dim)
+  bf8* w1; // (layer, hidden_dim, dim)
+  bf8* w2; // (layer, dim, hidden_dim)
+  bf8* w3; // (layer, hidden_dim, dim)
   // final rmsnorm
-  bf16* rms_final_weight; // (dim,)
+  bf8* rms_final_weight; // (dim,)
   // (optional) classifier weights for the logits, on the last layer
-  bf16* wcls;
+  bf8* wcls;
 } TransformerWeights;
 
 typedef struct {
   // current wave of activations
-  bf16* x; // activation at current time stamp (dim,)
-  bf16* xb; // same, but inside a residual branch (dim,)
-  bf16* xb2; // an additional buffer just for convenience (dim,)
-  bf16* hb; // buffer for hidden dimension in the ffn (hidden_dim,)
-  bf16* hb2; // buffer for hidden dimension in the ffn (hidden_dim,)
-  bf16* q; // query (dim,)
-  bf16* k; // key (dim,)
-  bf16* v; // value (dim,)
-  bf16* att; // buffer for scores/attention values (n_heads, seq_len)
-  bf16* logits; // output logits
+  bf8* x; // activation at current time stamp (dim,)
+  bf8* xb; // same, but inside a residual branch (dim,)
+  bf8* xb2; // an additional buffer just for convenience (dim,)
+  bf8* hb; // buffer for hidden dimension in the ffn (hidden_dim,)
+  bf8* hb2; // buffer for hidden dimension in the ffn (hidden_dim,)
+  bf8* q; // query (dim,)
+  bf8* k; // key (dim,)
+  bf8* v; // value (dim,)
+  bf8* att; // buffer for scores/attention values (n_heads, seq_len)
+  bf8* logits; // output logits
   // kv cache
-  bf16* key_cache;   // (layer, seq_len, dim)
-  bf16* value_cache; // (layer, seq_len, dim)
+  bf8* key_cache;   // (layer, seq_len, dim)
+  bf8* value_cache; // (layer, seq_len, dim)
 } RunState;
 
 typedef struct {
@@ -73,22 +73,22 @@ typedef struct {
   RunState state; // buffers for the "wave" of activations in the forward pass
   // some more state needed to properly clean up the memory mapping (sigh)
   i32 fd; // file descriptor for memory mapping
-  bf16* data; // memory mapped data pointer
+  bf8* data; // memory mapped data pointer
   ssize_t file_size; // size of the checkpoint file in bytes
 } Transformer;
 
 void malloc_run_state(RunState* s, Config* p) {
   i32 kv_dim = (p->dim * p->n_kv_heads) / p->n_heads;
 
-  auto alloc = [](u64 n) -> bf16* {
-    bf16* ptr = (bf16*)malloc(n * sizeof(bf16));
+  auto alloc = [](u64 n) -> bf8* {
+    bf8* ptr = (bf8*)malloc(n * sizeof(bf8));
     if (ptr == nullptr) {
       fprintf(stderr, "malloc failed!\n");
       exit(EXIT_FAILURE);
     }
 
     for (u64 i = 0; i < n; i++)
-      ptr[i] = bf16(0.f);
+      ptr[i] = bf8(0.f);
 
     return ptr;
   };
@@ -118,7 +118,7 @@ void free_run_state(RunState* s) {
   free(s->value_cache);
 }
 
-void memory_map_weights(TransformerWeights *w, Config* p, bf16* ptr, i32 shared_weights) {
+void memory_map_weights(TransformerWeights *w, Config* p, bf8* ptr, i32 shared_weights) {
   i32 head_size = p->dim / p->n_heads;
   // make sure the multiplications below are done in 64bit to fit the parameter counts of 13B+ models
   u64 n_layers = p->n_layers;
@@ -151,7 +151,7 @@ void memory_map_weights(TransformerWeights *w, Config* p, bf16* ptr, i32 shared_
 
 void read_checkpoint(
   char* checkpoint, Config* config, TransformerWeights* weights,
-  i32* fd, bf16** data, ssize_t* file_size
+  i32* fd, bf8** data, ssize_t* file_size
 ) {
   FILE *file = fopen(checkpoint, "rb");
   if (!file) {
@@ -178,12 +178,12 @@ void read_checkpoint(
     fprintf(stderr, "open failed!\n");
     exit(EXIT_FAILURE);
   }
-  *data = (bf16*)mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
+  *data = (bf8*)mmap(NULL, *file_size, PROT_READ, MAP_PRIVATE, *fd, 0);
   if (*data == MAP_FAILED) {
     fprintf(stderr, "mmap failed!\n");
     exit(EXIT_FAILURE);
   }
-  bf16* weights_ptr = *data + sizeof(Config) / sizeof(bf16);
+  bf8* weights_ptr = *data + sizeof(Config) / sizeof(bf8);
   memory_map_weights(weights, config, weights_ptr, shared_weights);
 }
 
@@ -207,9 +207,9 @@ void free_transformer(Transformer* t) {
 // ----------------------------------------------------------------------------
 // neural net blocks; the dynamics of the Transformer
 
-void rmsnorm(bf16* o, bf16* x, bf16* weight, i32 size) {
+void rmsnorm(bf8* o, bf8* x, bf8* weight, i32 size) {
   // calculate sum of squares
-  bf16 ss = 0.0f;
+  bf8 ss = 0.0f;
 
   /* No f32 for accumulated sum, shows worst results
   for (i32 j = 0; j < size; j++)
@@ -220,7 +220,7 @@ void rmsnorm(bf16* o, bf16* x, bf16* weight, i32 size) {
   for (i32 j = 0; j < size; j++)
     val += (f32)x[j] * (f32)x[j];
 
-  ss = bf16(val);
+  ss = bf8(val);
 
   ss /= size;
   ss += 1e-5f;
@@ -231,18 +231,18 @@ void rmsnorm(bf16* o, bf16* x, bf16* weight, i32 size) {
     o[j] = weight[j] * (ss * x[j]);
 }
 
-void softmax(bf16* x, i32 size) {
+void softmax(bf8* x, i32 size) {
   // find max value (for numerical stability)
-  bf16 max_val = x[0];
+  bf8 max_val = x[0];
   for (i32 i = 1; i < size; i++)
     if (x[i] > max_val)
       max_val = x[i];
 
   // exp and sum
-  bf16 sum = 0.0f;
+  bf8 sum = 0.0f;
   for (i32 i = 0; i < size; i++) {
-    bf16 tmp = x[i] - max_val;
-    x[i] = bf16(expf((f32)tmp));
+    bf8 tmp = x[i] - max_val;
+    x[i] = bf8(expf((f32)tmp));
     sum += x[i];
   }
 
@@ -251,7 +251,7 @@ void softmax(bf16* x, i32 size) {
     x[i] /= sum;
 }
 
-void matmul(bf16* xout, bf16* x, bf16* w, i32 n, i32 d) {
+void matmul(bf8* xout, bf8* x, bf8* w, i32 n, i32 d) {
   // W (d,n) @ x (n,) -> xout (d,)
   // by far the most amount of time is spent inside this little function
   i32 i;
@@ -259,7 +259,7 @@ void matmul(bf16* xout, bf16* x, bf16* w, i32 n, i32 d) {
   for (i = 0; i < d; i++) {
     
     /* No f32 for accumulated sum, shows worst results
-    bf16 val = 0.0f;
+    bf8 val = 0.0f;
     for (i32 j = 0; j < n; j++)
       val += w[i * n + j] * x[j];
     */
@@ -268,17 +268,17 @@ void matmul(bf16* xout, bf16* x, bf16* w, i32 n, i32 d) {
     for (i32 j = 0; j < n; j++)
       val += (f32)w[i * n + j] * (f32)x[j];
 
-    xout[i] = bf16(val);
+    xout[i] = bf8(val);
   }
 }
 
-bf16* forward(Transformer* transformer, i32 token, i32 pos) {
+bf8* forward(Transformer* transformer, i32 token, i32 pos) {
   // a few convenience variables
   Config* p = &transformer->config;
   TransformerWeights* w = &transformer->weights;
   RunState* s = &transformer->state;
 
-  bf16* x = s->x;
+  bf8* x = s->x;
   i32 dim = p->dim;
   i32 kv_dim = (p->dim * p->n_kv_heads) / p->n_heads;
   i32 kv_mul = p->n_heads / p->n_kv_heads; // i32eger multiplier of the kv sharing in multiquery
@@ -286,7 +286,7 @@ bf16* forward(Transformer* transformer, i32 token, i32 pos) {
   i32 head_size = dim / p->n_heads;
 
   // copy the token embedding i32o x
-  bf16* content_row = w->token_embedding_table + token * dim;
+  bf8* content_row = w->token_embedding_table + token * dim;
   memcpy(x, content_row, dim * sizeof(*x));
 
   // forward all the layers
@@ -308,16 +308,16 @@ bf16* forward(Transformer* transformer, i32 token, i32 pos) {
     // RoPE relative positional encoding: complex-valued rotate q and k in each head
     for (i32 i = 0; i < dim; i+=2) {
       i32 head_dim = i % head_size;
-      bf16 freq = bf16(1.0f / powf(10000.0f, head_dim / (f32)head_size));
-      bf16 val = bf16(pos) * freq;
-      bf16 fcr = bf16(cosf((f32)val));
-      bf16 fci = bf16(sinf((f32)val));
+      bf8 freq = bf8(1.0f / powf(10000.0f, head_dim / (f32)head_size));
+      bf8 val = bf8(pos) * freq;
+      bf8 fcr = bf8(cosf((f32)val));
+      bf8 fci = bf8(sinf((f32)val));
       i32 rotn = i < kv_dim ? 2 : 1; // how many vectors? 2 = q & k, 1 = q only
 
       for (i32 v = 0; v < rotn; v++) {
-        bf16* vec = v == 0 ? s->q : s->k; // the vector to rotate (query or key)
-        bf16 v0 = vec[i];
-        bf16 v1 = vec[i + 1];
+        bf8* vec = v == 0 ? s->q : s->k; // the vector to rotate (query or key)
+        bf8 v0 = vec[i];
+        bf8 v1 = vec[i + 1];
 
         vec[i]     = v0 * fcr - v1 * fci;
         vec[i + 1] = v0 * fci + v1 * fcr;
@@ -329,15 +329,15 @@ bf16* forward(Transformer* transformer, i32 token, i32 pos) {
     #pragma omp parallel for private(h)
     for (h = 0; h < p->n_heads; h++) {
       // get the query vector for this head
-      bf16* q = s->q + h * head_size;
+      bf8* q = s->q + h * head_size;
       // attention scores for this head
-      bf16* att = s->att + h * p->seq_len;
+      bf8* att = s->att + h * p->seq_len;
       // iterate over all timesteps, including the current one
       for (i32 t = 0; t <= pos; t++) {
         // get the key vector for this head and at this timestep
-        bf16* k = s->key_cache + loff + t * kv_dim + (h / kv_mul) * head_size;
+        bf8* k = s->key_cache + loff + t * kv_dim + (h / kv_mul) * head_size;
         // calculate the attention score as the dot product of q and k
-        bf16 score = 0.0f;
+        bf8 score = 0.0f;
         for (i32 i = 0; i < head_size; i++)
           score += q[i] * k[i];
         score /= sqrtf(head_size);
@@ -349,16 +349,16 @@ bf16* forward(Transformer* transformer, i32 token, i32 pos) {
       softmax(att, pos + 1);
 
       // weighted sum of the values, store back i32o xb
-      bf16* xb = s->xb + h * head_size;
+      bf8* xb = s->xb + h * head_size;
 
       for (i32 i = 0; i < head_size; i++)
-        xb[i] = bf16(0.f);
+        xb[i] = bf8(0.f);
 
       for (i32 t = 0; t <= pos; t++) {
         // get the value vector for this head and at this timestep
-        bf16* v = s->value_cache + loff + t * kv_dim + (h / kv_mul) * head_size;
+        bf8* v = s->value_cache + loff + t * kv_dim + (h / kv_mul) * head_size;
         // get the attention weight for this timestep
-        bf16 a = att[t];
+        bf8 a = att[t];
         // accumulate the weighted value i32o xb
         for (i32 i = 0; i < head_size; i++)
           xb[i] += a * v[i];
@@ -382,9 +382,9 @@ bf16* forward(Transformer* transformer, i32 token, i32 pos) {
 
     // SwiGLU non-linearity
     for (i32 i = 0; i < hidden_dim; i++) {
-      bf16 val = s->hb[i];
+      bf8 val = s->hb[i];
       // silu(x)=x*σ(x), where σ(x) is the logistic sigmoid
-      val *= bf16((1.0f / (1.0f + expf((f32)(-val)))));
+      val *= bf8((1.0f / (1.0f + expf((f32)(-val)))));
       // elementwise multiply with w3(x)
       val *= s->hb2[i];
       s->hb[i] = val;
@@ -417,7 +417,7 @@ typedef struct {
 
 typedef struct {
   char** vocab;
-  bf16* vocab_scores;
+  bf8* vocab_scores;
   TokenIndex *sorted_vocab;
   i32 vocab_size;
   u32 max_token_length;
@@ -433,7 +433,7 @@ void build_tokenizer(Tokenizer* t, const char* tokenizer_path, i32 vocab_size) {
   t->vocab_size = vocab_size;
   // malloc space to hold the scores and the strings
   t->vocab = (char**)malloc(vocab_size * sizeof(char*));
-  t->vocab_scores = (bf16*)malloc(vocab_size * sizeof(bf16));
+  t->vocab_scores = (bf8*)malloc(vocab_size * sizeof(bf8));
   t->sorted_vocab = NULL; // initialized lazily
   for (i32 i = 0; i < 256; i++) {
     t->byte_pieces[i * 2] = (u8)i;
@@ -453,7 +453,7 @@ void build_tokenizer(Tokenizer* t, const char* tokenizer_path, i32 vocab_size) {
 
   i32 len;
   for (i32 i = 0; i < vocab_size; i++) {
-    if (fread(t->vocab_scores + i, sizeof(bf16), 1, file) != 1) {
+    if (fread(t->vocab_scores + i, sizeof(bf8), 1, file) != 1) {
       fprintf(stderr, "failed read\n");
       exit(EXIT_FAILURE);
     }
@@ -603,7 +603,7 @@ void encode(Tokenizer* t, char *text, i8 bos, i8 eos, i32 *tokens, i32 *n_tokens
 
   // merge the best consecutive pair each iteration, according the scores in vocab_scores
   while (1) {
-    bf16 best_score = bf16(-1e10f);
+    bf8 best_score = bf8(-1e10f);
     i32 best_id = -1;
     i32 best_idx = -1;
 
@@ -643,22 +643,22 @@ void encode(Tokenizer* t, char *text, i8 bos, i8 eos, i32 *tokens, i32 *n_tokens
 // sampling can be done in a few ways: greedy argmax, sampling, top-p sampling
 
 typedef struct {
-  bf16 prob;
+  bf8 prob;
   i32 index;
 } ProbIndex; // struct used when sorting probabilities during top-p sampling
 
 typedef struct {
   i32 vocab_size;
   ProbIndex* probindex; // buffer used in top-p sampling
-  bf16 temperature;
-  bf16 topp;
+  bf8 temperature;
+  bf8 topp;
   u64 rng_state;
 } Sampler;
 
-i32 sample_argmax(bf16* probabilities, i32 n) {
+i32 sample_argmax(bf8* probabilities, i32 n) {
   // return the index that has the highest probability
   i32 max_i = 0;
-  bf16 max_p = probabilities[0];
+  bf8 max_p = probabilities[0];
   for (i32 i = 1; i < n; i++) {
     if (probabilities[i] > max_p) {
       max_i = i;
@@ -668,10 +668,10 @@ i32 sample_argmax(bf16* probabilities, i32 n) {
   return max_i;
 }
 
-i32 sample_mult(bf16* probabilities, i32 n, bf16 coin) {
+i32 sample_mult(bf8* probabilities, i32 n, bf8 coin) {
   // sample index from probabilities (they must sum to 1!)
-  // coin is a random number in [0, 1), usually from random_bf16()
-  bf16 cdf = 0.0f;
+  // coin is a random number in [0, 1), usually from random_bf8()
+  bf8 cdf = 0.0f;
 
   for (i32 i = 0; i < n; i++) {
     cdf += probabilities[i];
@@ -695,18 +695,18 @@ i32 compare(const void* a, const void* b) {
   return 0;
 }
 
-i32 sample_topp(bf16* probabilities, i32 n, bf16 topp, ProbIndex* probindex, bf16 coin) {
+i32 sample_topp(bf8* probabilities, i32 n, bf8 topp, ProbIndex* probindex, bf8 coin) {
   // top-p sampling (or "nucleus sampling") samples from the smallest set of
   // tokens that exceed probability topp. This way we never sample tokens that
   // have very low probabilities and are less likely to go "off the rails".
-  // coin is a random number in [0, 1), usually from random_bf16()
+  // coin is a random number in [0, 1), usually from random_bf8()
 
   i32 n0 = 0;
   // quicksort indices in descending order of probabilities
   // values smaller than (1 - topp) / (n - 1) cannot be part of the result
   // so for efficiency we crop these out as candidates before sorting
 
-  const bf16 cutoff = bf16((f32)(bf16(1.0f) - topp) / (n - 1));
+  const bf8 cutoff = bf8((f32)(bf8(1.0f) - topp) / (n - 1));
 
   for (i32 i = 0; i < n; i++) {
     if (probabilities[i] >= cutoff) {
@@ -718,7 +718,7 @@ i32 sample_topp(bf16* probabilities, i32 n, bf16 topp, ProbIndex* probindex, bf1
   qsort(probindex, n0, sizeof(ProbIndex), compare);
 
   // truncate the list where cumulative probability exceeds topp
-  bf16 cumulative_prob = 0.0f;
+  bf8 cumulative_prob = 0.0f;
   i32 last_idx = n0 - 1; // in case of rounding errors consider all elements
   for (i32 i = 0; i < n0; i++) {
     cumulative_prob += probindex[i].prob;
@@ -730,8 +730,8 @@ i32 sample_topp(bf16* probabilities, i32 n, bf16 topp, ProbIndex* probindex, bf1
   }
 
   // sample from the truncated list
-  bf16 r = coin * cumulative_prob;
-  bf16 cdf = 0.0f;
+  bf8 r = coin * cumulative_prob;
+  bf8 cdf = 0.0f;
   for (i32 i = 0; i <= last_idx; i++) {
     cdf += probindex[i].prob;
 
@@ -741,7 +741,7 @@ i32 sample_topp(bf16* probabilities, i32 n, bf16 topp, ProbIndex* probindex, bf1
   return probindex[last_idx].index; // in case of rounding errors
 }
 
-void build_sampler(Sampler* sampler, i32 vocab_size, bf16 temperature, bf16 topp, u64 rng_seed) {
+void build_sampler(Sampler* sampler, i32 vocab_size, bf8 temperature, bf8 topp, u64 rng_seed) {
   sampler->vocab_size = vocab_size;
   sampler->temperature = temperature;
   sampler->topp = topp;
@@ -762,14 +762,14 @@ u32 random_u32(u64 *state) {
   return (*state * 0x2545F4914F6CDD1Dull) >> 32;
 }
 
-bf16 random_bf16(u64 *state) { // random bf1632 in [0,1)
-  return bf16((random_u32(state) >> 8) / 16777216.0f);
+bf8 random_bf8(u64 *state) { // random bf832 in [0,1)
+  return bf8((random_u32(state) >> 8) / 16777216.0f);
 }
 
-i32 sample(Sampler* sampler, bf16* logits) {
+i32 sample(Sampler* sampler, bf8* logits) {
   // sample the token given the logits and some hyperparameters
   i32 next;
-  if (sampler->temperature == 0.0f) {
+  if (sampler->temperature == bf8(0.0f)) {
     // greedy argmax sampling: take the token with the highest probability
     next = sample_argmax(logits, sampler->vocab_size);
   } else {
@@ -777,10 +777,10 @@ i32 sample(Sampler* sampler, bf16* logits) {
     for (i32 q = 0; q<sampler->vocab_size; q++) { logits[q] /= sampler->temperature; }
     // apply softmax to the logits to get the probabilities for next token
     softmax(logits, sampler->vocab_size);
-    // flip a (bf16) coin (this is our source of entropy for sampling)
-    bf16 coin = random_bf16(&sampler->rng_state);
+    // flip a (bf8) coin (this is our source of entropy for sampling)
+    bf8 coin = random_bf8(&sampler->rng_state);
     // we sample from this distribution to get the next token
-    if (sampler->topp <= bf16(0.0f) || sampler->topp >= bf16(1.0f)) {
+    if (sampler->topp <= bf8(0.0f) || sampler->topp >= bf8(1.0f)) {
       // simply sample from the predicted probability distribution
       next = sample_mult(logits, sampler->vocab_size, coin);
     } else {
@@ -826,7 +826,7 @@ void generate(Transformer *transformer, Tokenizer *tokenizer, Sampler *sampler, 
 
   while (pos < steps) {
     // forward the transformer to get logits for the next token
-    bf16* logits = forward(transformer, token, pos);
+    bf8* logits = forward(transformer, token, pos);
 
     // advance the state machine
     if (pos < num_prompt_tokens - 1) {
@@ -948,7 +948,7 @@ void chat(
       user_turn = 1;
 
     // forward the transformer to get logits for the next token
-    bf16* logits = forward(transformer, token, pos);
+    bf8* logits = forward(transformer, token, pos);
     next = sample(sampler, logits);
     pos++;
 
@@ -973,8 +973,8 @@ void error_usage() {
   fprintf(stderr, "Usage:   run <checkpoint> [options]\n");
   fprintf(stderr, "Example: run model.bin -n 256 -i \"Once upon a time\"\n");
   fprintf(stderr, "Options:\n");
-  fprintf(stderr, "  -t <bf16>  temperature in [0,inf], default 1.0\n");
-  fprintf(stderr, "  -p <bf16>  p value in top-p (nucleus) sampling in [0,1] default 0.9\n");
+  fprintf(stderr, "  -t <bf8>  temperature in [0,inf], default 1.0\n");
+  fprintf(stderr, "  -p <bf8>  p value in top-p (nucleus) sampling in [0,1] default 0.9\n");
   fprintf(stderr, "  -s <i32>  random seed, default time(NULL)\n");
   fprintf(stderr, "  -n <i32>  number of steps to run for, default 256. 0 = max_seq_len\n");
   fprintf(stderr, "  -i <string> input prompt\n");
@@ -988,8 +988,8 @@ i32 main(i32 argc, char *argv[]) {
   // default parameters
   char *checkpoint_path = NULL;  // e.g. out/model.bin
   const char *tokenizer_path = "tokenizer.bin";
-  bf16 temperature = 1.0f;   // 0.0 = greedy deterministic. 1.0 = original. don't set higher
-  bf16 topp = 0.9f;      // top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
+  bf8 temperature = 1.0f;   // 0.0 = greedy deterministic. 1.0 = original. don't set higher
+  bf8 topp = 0.9f;      // top-p in nucleus sampling. 1.0 = off. 0.9 works well, but slower
   i32 steps = 256;      // number of steps to run for
   char *prompt = NULL;    // prompt string
   u64 rng_seed = 0; // seed rng with time by default
@@ -1009,9 +1009,9 @@ i32 main(i32 argc, char *argv[]) {
     
     // read in the args
     if (argv[i][1] == 't')
-      temperature = bf16((f32)atof(argv[i + 1]));
+      temperature = bf8((f32)atof(argv[i + 1]));
     else if (argv[i][1] == 'p')
-      topp = bf16((f32)atof(argv[i + 1]));
+      topp = bf8((f32)atof(argv[i + 1]));
     else if (argv[i][1] == 's')
       rng_seed = atoi(argv[i + 1]);
     else if (argv[i][1] == 'n')
@@ -1031,10 +1031,10 @@ i32 main(i32 argc, char *argv[]) {
   // parameter validation/overrides
   if (rng_seed <= 0)
     rng_seed = (u32)time(NULL);
-  if (temperature < bf16(0.0f))
-    temperature = bf16(0.0f);
-  if (topp < bf16(0.0f) || bf16(1.0f) < topp)
-    topp = bf16(0.9f);
+  if (temperature < bf8(0.0f))
+    temperature = bf8(0.0f);
+  if (topp < bf8(0.0f) || bf8(1.0f) < topp)
+    topp = bf8(0.9f);
   if (steps < 0)
     steps = 0;
 

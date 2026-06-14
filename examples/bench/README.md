@@ -128,11 +128,9 @@ most complete picture.
 
 ### Winner heatmaps
 
+![relative and absolute error heatmap by bit-size](results/ops_heatmap_combined_rel_abs.png)
+
 #### 8-bit: lns8 vs bf8
-
-![8-bit relative heatmap](results/ops_heatmap_lns8_bf8_rel.png)
-
-![8-bit absolute heatmap](results/ops_heatmap_lns8_bf8_abs.png)
 
 The 8-bit picture is identical under both relative and absolute error:
 bf8 wins across all three bands. There are no ties.
@@ -155,10 +153,6 @@ table, introducing error that bf8's direct fixed-point add does not
 suffer.
 
 #### 16-bit: lns16 vs bf16
-
-![16-bit absolute heatmap](results/ops_heatmap_lns16_bf16_abs.png)
-
-![16-bit relative heatmap](results/ops_heatmap_lns16_bf16_rel.png)
 
 The 16-bit results are more nuanced and the two metrics tell different
 stories for mul.
@@ -187,9 +181,7 @@ comparable density to bf16 in each binade.
 
 ### Error by band
 
-![avg relative error by band](results/ops_avg_rel.png)
-
-![avg absolute error by band](results/ops_avg_abs.png)
+![avg relative and absolute error by band](results/ops_errors.png)
 
 **avg_rel**: relative error is approximately band-invariant for all
 formats and ops, as expected from scale-free formats.  The LNS/BF gap
@@ -250,9 +242,13 @@ a compound chain of mul, add, and tanh.  The sweep is restricted to
 [−2, 2] so that all outputs fall in (−1.1, 2), safely inside all formats'
 representable range.  avg_rel across all sweep points is reported.
 
-**7. Softmax sum** — numerically stable softmax denominator `Σ exp(x_i - max(x))` over 512 values log-uniform in [0.01, 100].  Exercises exp followed by accumulation; the subtraction of the max keeps operands in a safe range.
+**7. Softmax sum** — numerically stable softmax denominator `Σ exp(x_i - max(x))`
+over 512 values log-uniform in [0.01, 100].  Exercises exp followed by 
+accumulation; the subtraction of the max keeps operands in a safe range.
 
-**8. RMSNorm denominator** — `sqrt(Σ x_i^2 / N)` over 512 values log-uniform in [0.01, 100], normalised so the expected result is near 1.  Exercises squaring (exact in LNS), accumulation, and square root (exact in LNS).
+**8. RMSNorm denominator** — `sqrt(Σ x_i^2 / N)` over 512 values log-uniform 
+in [0.01, 100], normalised so the expected result is near 1.  
+Exercises squaring (exact in LNS), accumulation, and square root (exact in LNS).
 
 ---
 
@@ -262,7 +258,11 @@ representable range.  avg_rel across all sweep points is reported.
 
 ![numerical relative error](results/numerical_rel.png)
 
-Both plots show all eight test groups; bars are grouped so that the lns16 base variant and the lns16_lns32acc / lns16_f32acc accumulator variants appear adjacently, and similarly for bf16 and bf16_f32acc.  This makes the accumulator contribution directly visible.  Winners are assessed on relative error; the absolute chart is provided for completeness and to show the 8-bit picture.
+Both plots show all eight test groups; bars are grouped so that the lns16 base 
+variant and the lns16_lns32acc / lns16_f32acc accumulator variants appear 
+adjacently, and similarly for bf16 and bf16_f32acc.  This makes the accumulator 
+contribution directly visible.  Winners are assessed on relative error; the 
+absolute chart is provided for completeness and to show the 8-bit picture.
 
 | Test | Winner (lns16 vs bf16) | Notes |
 |------|------------------------|-------|

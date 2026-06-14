@@ -16,11 +16,6 @@ Addition and subtraction require a correction term
 $\log_2(1 \pm 2^{\text{diff}})$ which is approximated via a precomputed 
 spline lookup table.
 
-The two supported formats are:
-
-- **lns8 Q4.3** — 8-bit, 1 sign bit, 4-bit integer exponent, 3-bit fractional exponent. Representable range: $2^{-8}$ to $2^{7.875}$.
-- **lns16 Q8.7** — 16-bit, 1 sign bit, 8-bit integer exponent, 7-bit fractional exponent. Representable range: $2^{-128}$ to $2^{127.992}$.
-
 ---
 
 ## Why LNS?
@@ -203,10 +198,7 @@ both absolute and relative error, while bf16 wins on relative error at 16 bits
 but lns16 recovers the advantage on absolute error — reflecting bf16's 
 asymmetric precision distribution favouring values near zero.
 
-![8-bit winner heatmap — relative error](examples/bench/results/ops_heatmap_lns8_bf8_rel.png)
-![8-bit winner heatmap — absolute error](examples/bench/results/ops_heatmap_lns8_bf8_abs.png)
-![16-bit winner heatmap — relative error](examples/bench/results/ops_heatmap_lns16_bf16_rel.png)
-![16-bit winner heatmap — absolute error](examples/bench/results/ops_heatmap_lns16_bf16_abs.png)
+![winner heatmap by bit size — relative and absolute error](examples/bench/results/ops_heatmap_combined_rel_abs.png)
 
 #### Numerical tests (lns16 vs bf16)
 

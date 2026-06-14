@@ -37,8 +37,8 @@ struct lns {
   bool operator> (const lns other) const;
   bool operator>=(const lns other) const;
 
-  static inline lns load(const void* addr, u32 imm = 0);
-  inline void store(void* addr, u32 imm = 0) const;
+  static inline lns  load (const void* addr, u32 imm = 0);
+  inline        void store(void* addr, u32 imm = 0) const;
 };
 
 using lns8  = lns<8>;

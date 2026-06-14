@@ -1,7 +1,12 @@
 #ifndef __LNS_SIM_INL__
 #define __LNS_SIM_INL__
 
-#define LNS_ZERO(n)                     (1 << (n - 2))
+#define LNS_SIGN(n, expr)               ((uint_t<n>(expr) << (n - 1)))
+#define LNS_ZERO(n)                     (uint_t<n>(1) << (n - 2))
+#define LNS_EXPONENT_BITMASK(n)         ((uint_t<n>(1) << (n - 1)) - 1)
+#define LNS_EXP_INT_MASK(n, f)          ((uint_t<n>(1) << (n - 1 - f)) - 1)
+#define LNS_EXP_FRAC_MASK(f)            ((uint_t<n>(1) << f) - 1)
+
 #define F32_SIGN(raw)                   ((raw >> 31) & 1)
 #define F32_EXP(raw)                    ((raw >> 23) & 0xFF)
 #define F32_FRAC(raw)                   (raw & 0x7FFFFF)
@@ -61,14 +66,10 @@ lns<n,i,f>::lns(f32 x) {
   );
   */
 
-  constexpr uint_t<n>
-    lns_exp_int_mask  = ((1 << (n - 1 - f)) - 1),
-    lns_exp_frac_mask = (1 << f) - 1;
-
   bits =
     (lns_sign << (n - 1)) |
-    ((lns_exp_int & lns_exp_int_mask) << f) |
-    (lns_exp_frac & lns_exp_frac_mask);
+    ((lns_exp_int & LNS_EXP_INT_MASK(n, f)) << f) |
+    (lns_exp_frac & LNS_EXP_FRAC_MASK(f));
 
   // printf("bits=0x%08X\n", bits);
 }
@@ -121,32 +122,32 @@ lns<n, i, f>::lns(const lns<n2, i2, f2>& other) {
     return;
   }
 
-  const int_t<n2> raw_mag = other.bits & ((uint_t<n2>(1) << (n2 - 1)) - 1);
+  const int_t<n2> raw_exp = other.bits & LNS_EXPONENT_BITMASK(n2);
 
-  int_t<n> dst_mag;
+  int_t<n> dst_exp;
   if constexpr (f >= f2) {
-    dst_mag = (int_t<n>)raw_mag << (f - f2);
+    dst_exp = (int_t<n>)raw_exp << (f - f2);
 
-    const bool sign_extend = (raw_mag >> (n2 - 2)) & 1;
+    const bool sign_extend = (raw_exp >> (n2 - 2)) & 1;
     if (sign_extend) {
       constexpr int_t<n> sign_extention = (uint_t<n>)(~0) << (f - f2 + n2 - 1);
-      dst_mag |= sign_extention & ((uint_t<n>(1) << (n - 1)) - 1);
+      dst_exp |= sign_extention & LNS_EXPONENT_BITMASK(n);
     }
   }
   else
-    dst_mag = (int_t<n>)(raw_mag >> (f2 - f)) & ((uint_t<n>(1) << (n - 1)) - 1);
+    dst_exp = (int_t<n>)(raw_exp >> (f2 - f)) & LNS_EXPONENT_BITMASK(n);
 
-  if (dst_mag == LNS_ZERO(n))
-    dst_mag++; // avoid zero sentinel
+  if (dst_exp == LNS_ZERO(n))
+    dst_exp++; // avoid zero sentinel
 
-  bits = (other.sign() << (n - 1)) ^ dst_mag;
+  bits = (other.sign() << (n - 1)) ^ dst_exp;
 
   /*
   if constexpr (n == 8 && n2 == 32) {
     other.debug_print("other");
     printf(
-      "sign_extend=%d, raw_mag=0x%02X, dst_mag=(raw_mag << %d)=0x%08X\n",
-      sign_extend, raw_mag, f - f2, dst_mag
+      "sign_extend=%d, raw_exp=0x%02X, dst_exp=(raw_exp << %d)=0x%08X\n",
+      sign_extend, raw_exp, f - f2, dst_exp
     );
     this->debug_print("new");
   }
@@ -160,12 +161,12 @@ u8 lns<n,i,f>::sign() const {
 
 template<u8 n, u8 i, u8 f>
 int_t<n> lns<n,i,f>::exponent() const {
-  return ((bits & (uint_t<n>)(1 << (n - 2))) << 1) | (bits & ((uint_t<n>)(1 << (n - 1)) - 1));
+  return ((bits & LNS_ZERO(n)) << 1) | (bits & LNS_EXPONENT_BITMASK(n));
 }
 
 template<u8 n, u8 i, u8 f>
 bool lns<n,i,f>::is_zero() const {
-  return (bits & ((uint_t<n>)(1 << (n - 1)) - 1)) == LNS_ZERO(n);
+  return (bits & LNS_EXPONENT_BITMASK(n)) == LNS_ZERO(n);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -200,7 +201,7 @@ lns<n,i,f> lns<n,i,f>::operator+(const lns other) const {
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f> lns<n,i,f>::operator-() const {
-  return lns(bits ^ (uint_t<n>(1) << (n - 1)), false);
+  return lns(bits ^ LNS_SIGN(n, 1), false);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -213,10 +214,10 @@ lns<n,i,f> lns<n,i,f>::operator*(const lns other) const {
   if (is_zero() || other.is_zero())
     return lns(LNS_ZERO(n), false);
 
-  const uint_t<n> _sign        = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
+  const uint_t<n> _sign        = LNS_SIGN(n, sign() ^ other.sign());
   const int_t<n>  combined_exp = exponent() + other.exponent();
 
-  uint_t<n> _exp_bits = (uint_t<n>)combined_exp & ((uint_t<n>)(1 << (n - 1)) - 1);
+  uint_t<n> _exp_bits = (uint_t<n>)combined_exp & LNS_EXPONENT_BITMASK(n);
   if (_exp_bits == LNS_ZERO(n))
     _exp_bits++;
 
@@ -232,32 +233,33 @@ lns<n,i,f> lns<n,i,f>::operator/(const lns other) const {
   if (this->is_zero())
     return *this;
 
-  const uint_t<n> _sign = (uint_t<n>)(sign() ^ other.sign()) << (n - 1);
-  const uint_t<n> _exp  = (uint_t<n>)(exponent() - other.exponent()) & ((uint_t<n>)(1 << (n - 1)) - 1);
+  const uint_t<n> 
+    _sign = LNS_SIGN(n, sign() ^ other.sign()),
+    _exp  = (exponent() - other.exponent()) & LNS_EXPONENT_BITMASK(n);
 
   return lns(_sign | _exp, false);
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f> lns<n,i,f>::power2_pow(const u8 k) const {
-  return lns((exponent() << k) & ((1 << (n - 1)) - 1), false);
+  return lns((exponent() << k) & LNS_EXPONENT_BITMASK(n), false);
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f> lns<n,i,f>::power2_root(const u8 k) const {
   assert(!sign());
-  return lns((exponent() >> k) & ((1 << (n - 1)) - 1), false);
+  return lns((exponent() >> k) & LNS_EXPONENT_BITMASK(n), false);
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f> lns<n,i,f>::square() const {
-  return lns((exponent() << 1) & ((1 << (n - 1)) - 1), false);
+  return lns((exponent() << 1) & LNS_EXPONENT_BITMASK(n), false);
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f> lns<n,i,f>::sqrt() const {
   assert(!sign());
-  return lns((exponent() >> 1) & ((1 << (n - 1)) - 1), false);
+  return lns((exponent() >> 1) & LNS_EXPONENT_BITMASK(n), false);
 }
 
 template<u8 n, u8 i, u8 f>
@@ -288,22 +290,26 @@ lns<n,i,f> lns<n,i,f>::tanh() const {
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f>& lns<n,i,f>::operator+=(const lns other) {
-  *this = *this + other; return *this;
+  *this = *this + other;
+  return *this;
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f>& lns<n,i,f>::operator-=(const lns other) {
-  *this = *this - other; return *this;
+  *this = *this - other;
+  return *this;
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f>& lns<n,i,f>::operator*=(const lns other) {
-  *this = *this * other; return *this;
+  *this = *this * other;
+  return *this;
 }
 
 template<u8 n, u8 i, u8 f>
 lns<n,i,f>& lns<n,i,f>::operator/=(const lns other) {
-  *this = *this / other; return *this;
+  *this = *this / other;
+  return *this;
 }
 
 template<u8 n, u8 i, u8 f>
@@ -313,18 +319,30 @@ bool lns<n,i,f>::operator==(const lns other) const {
 
 template<u8 n, u8 i, u8 f>
 bool lns<n,i,f>::operator<(const lns other) const {
-  const u8 sign1 = sign(), sign2 = other.sign();
-  const int_t<n> exp1 = exponent(), exp2 = other.exponent();
-  return (sign1 && (!sign2 || exp1 > exp2)) ||
-       (!sign1 && !sign2 && exp1 < exp2);
+  const u8 
+    sign1 = sign(),
+    sign2 = other.sign();
+  const int_t<n>
+    exp1 = exponent(),
+    exp2 = other.exponent();
+  return (
+    (sign1 && (!sign2 || exp1 > exp2)) ||
+    (!sign1 && !sign2 && exp1 < exp2)
+  );
 }
 
 template<u8 n, u8 i, u8 f>
 bool lns<n,i,f>::operator>(const lns other) const {
-  const u8 sign1 = sign(), sign2 = other.sign();
-  const int_t<n> exp1 = exponent(), exp2 = other.exponent();
-  return (sign1 && sign2 && exp1 < exp2) ||
-       (!sign1 && (sign2 || exp1 > exp2));
+  const u8 
+    sign1 = sign(),
+    sign2 = other.sign();
+  const int_t<n> 
+    exp1 = exponent(),
+    exp2 = other.exponent();
+  return (
+    sign1 && sign2 && exp1 < exp2) ||
+    (!sign1 && (sign2 || exp1 > exp2)
+  );
 }
 
 template<u8 n, u8 i, u8 f>

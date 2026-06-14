@@ -17,7 +17,6 @@ struct lns {
   lns(uint_t<n> raw, bool);
   lns(i32 x);
   lns(f32 x);
-  // Convert from a different LNS type
   template<u8 n2, u8 i2, u8 f2>
   lns(const lns<n2, i2, f2>& other);
 
@@ -28,35 +27,35 @@ struct lns {
   int_t<n> exponent() const;
   bool     is_zero()  const;
 
-  lns operator+ (const lns other) const;
-  lns operator- (const lns other) const;
-  lns operator- ()                const;
-  lns operator* (const lns other) const;
-  lns operator/ (const lns other) const;
+  lns operator+   (const lns other)   const;
+  lns operator-   (const lns other)   const;
+  lns operator-   ()                  const;
+  lns operator*   (const lns other)   const;
+  lns operator/   (const lns other)   const;
 
-  lns power2_pow(const u8 k)  const;
-  lns power2_root(const u8 k) const;
+  lns power2_pow  (const u8 k)        const;
+  lns power2_root (const u8 k)        const;
 
-  lns square() const;
-  lns sqrt()   const;
-  lns exp()    const;
-  lns sinh()   const;
-  lns cosh()   const;
-  lns tanh()   const;
+  lns square      ()                  const;
+  lns sqrt        ()                  const;
+  lns exp         ()                  const;
+  lns sinh        ()                  const;
+  lns cosh        ()                  const;
+  lns tanh        ()                  const;
 
-  lns& operator+=(const lns other);
-  lns& operator-=(const lns other);
-  lns& operator*=(const lns other);
-  lns& operator/=(const lns other);
+  lns& operator+= (const lns other);
+  lns& operator-= (const lns other);
+  lns& operator*= (const lns other);
+  lns& operator/= (const lns other);
 
-  bool operator==(const lns other) const;
-  bool operator< (const lns other) const;
-  bool operator> (const lns other) const;
-  bool operator<=(const lns other) const;
-  bool operator>=(const lns other) const;
+  bool operator== (const lns other)   const;
+  bool operator<  (const lns other)   const;
+  bool operator>  (const lns other)   const;
+  bool operator<= (const lns other)   const;
+  bool operator>= (const lns other)   const;
 
-  void print_hex()                    const;
-  void print_bin()                    const;
+  void print_hex  ()                  const;
+  void print_bin  ()                  const;
   void debug_print(const char* label) const;
 
 private:
