@@ -10,7 +10,7 @@
 // Band tables
 // ---------------------------------------------------------------------------
 
-const band_t BANDS8[] = {
+const interval_t BANDS8[] = {
   { 1.0f / 8.0f, 1.0f,     "[2^(-p+1), 1]" },
   { 1.0f,        2.0f,     "[1,  2]"       },
   { 2.0f,        4.0f,     "[2,  4]"       },
@@ -19,7 +19,7 @@ const band_t BANDS8[] = {
 };
 const u32 N_BANDS8  = sizeof(BANDS8)  / sizeof(BANDS8[0]);
 
-const band_t BANDS16[] = {
+const interval_t BANDS16[] = {
   { 1.0f / 128.0f, 1.0f,      "[2^(-p+1), 1]" },
   { 1.0f,          2.0f,      "[1, 2]"         },
   { 2.0f,          4.0f,      "[2, 4]"         },
@@ -396,15 +396,15 @@ static format_stats run_bf16(u32 n, f32 lo, f32 hi) {
 }
 
 // ---------------------------------------------------------------------------
-// CSV flush helper — emits all five ops for one format in one band.
+// CSV flush helper — emits all five ops for one format in one interval.
 // ---------------------------------------------------------------------------
 
-static void flush_csv(const char* fmt, const char* band, const format_stats* fs) {
-  csv_write_ops(fmt, band, "rt",  &fs->rt);
-  csv_write_ops(fmt, band, "mul", &fs->mul);
-  csv_write_ops(fmt, band, "div", &fs->div_);
-  csv_write_ops(fmt, band, "add", &fs->add_);
-  csv_write_ops(fmt, band, "sub", &fs->sub_);
+static void flush_csv(const char* fmt, const char* interval, const format_stats* fs) {
+  csv_write_ops(fmt, interval, "rt",  &fs->rt);
+  csv_write_ops(fmt, interval, "mul", &fs->mul);
+  csv_write_ops(fmt, interval, "div", &fs->div_);
+  csv_write_ops(fmt, interval, "add", &fs->add_);
+  csv_write_ops(fmt, interval, "sub", &fs->sub_);
 }
 
 // ---------------------------------------------------------------------------

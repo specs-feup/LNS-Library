@@ -107,7 +107,7 @@
 O Logarithmic Number System (LNS) representa os valores como
 logaritmos de vírgula fixa em complemento para dois,
 permitindo que a multiplicação e a divisão sejam realizadas
-através de simples adições e subtrações inteiras, e que a
+através de simples adições e subtrações inteiras e que a
 raiz quadrada se reduza a um deslocamento aritmético à
 direita. Esta propriedade elimina os multiplicadores de
 mantissa do hardware, reduzindo significativamente a área
@@ -119,35 +119,35 @@ Este estágio, realizado no INESC TEC, teve quatro objectivos
 principais: em primeiro lugar, a continuação de trabalho
 realizado previamente com o LNS, que foi focado nas
 operações aritméticas, ao adicionar operações de
-comparação e conversão de FP/BF para LNS
-e vice-versa,
+comparação e conversão de Floaint Point/Brain Float (FP/BF) 
+para LNS e vice-versa,
 em segundo lugar, criar uma biblioteca de
 emulação LNS para criar uma base de exploração do formato,
 em terceiro lugar, realizar uma comparação
 estatística da precisão aritmética
-entre LNS e BF em múltiplas bandas de magnitude
-de operando e, em quarto lugar, suportar inferência
+entre LNS e BF em múltiplos intervalos 
+e, em quarto lugar, suportar inferência
 em LLMs, nomeadamente a arquitectura Llama 2.
 
 No regime de 8 bits, o `bf8` é o claro vencedor, no entanto, 
 o `lns8` tem apenas uma pequena desvantagem sob o `bf8`
-na multiplicação e divisão em todas as bandas de magnitude
-testadas, enquanto tem uma maior na adição,
-subtracção e fidelidade de round-trip — padrão que reflecte
+na multiplicação e divisão em todos os intervalos 
+testados, enquanto tem uma maior vantagem na adição,
+subtracção e round-trip (conversão de um número em
+`fp32` para o formato e conversão de volta para `fp32`) 
+— padrão que reflecte
 directamente a natureza do LNS, onde a multiplicação e a
 divisão são operações exactas no domínio logarítmico, ao
 passo que a adição e a subtracção requerem funções de
-correcção não-lineares sujeitas a erro de aproximação.
+correção não-lineares sujeitas a erro de aproximação.
 No regime de 16 bits, o `bf16` domina o erro relativo na
 multiplicação, adição e subtracção, enquanto o `lns16`
-mantém vantagem consistente na divisão em todas as
-bandas e no erro absoluto da multiplicação — reflectindo
-a distribuição assimétrica de precisão do `bf16`,
-que favorece valores próximos de zero.
+mantém vantagem consistente na divisão em todos os
+intervalos e no erro absoluto da multiplicação. 
 Nos testes numéricos, ambos os formatos de 8 bits
 têm um erro relativo equivalente abaixo de 1.0 em
-tarefas de acumulação intensiva como a progressão
-geométrica e a série harmónica alternada,
+tarefas de acumulação intensiva como uma progressão
+geométrica e uma série harmónica alternada,
 evidenciando as limitações inerentes à precisão reduzida,
 equanto que em 16 bits, o LNS apresenta um erro
 significantemente inferior ao BF. Também no regime
@@ -219,6 +219,8 @@ investigação e pelos recursos disponibilizados.
   [*LNS*],  [Logarithmic Number System],
   [*LNSU*], [Logarithmic Number System Unit],
   [*LUT*],  [Look-Up Table],
+  [*MAE*],  [Mean Absolute Error],
+  [*MRE*],  [Mean Relative Error],
   [*RISC*], [Reduced Instruction Set Computer],
   [*XF*],   [Spline format storing $(x, f)$ point pairs],
   [*XMB*],  [Spline format storing $(x, m, b)$ segment coefficients],
@@ -288,9 +290,10 @@ trabalho em quatro direcções principais:
 + #link(<llm-inf>)[*suportar inferência em LLMs*], nomeadamente a arquitectura Llama 2.
 
 Este relatório está estruturado da seguinte forma:
-- a @enquadramento-soa apresenta o enquadramento e estado da arte;
+- a @enquadramento-soa apresenta o estado da arte e o enquadramento;
 - a @work-description descreve em detalhe o trabalho realizado;
-- a @conclusion-and-future-work apresenta as conclusões e perspectivas de trabalho futuro.
+- a @sec-resultados reúne os resultados e procede à análise destes;
+- a @conclusion-and-future-work expõe as conclusões e perspectivas de trabalho futuro.
 
 // ════════════════════════════════════════════════════════════
 //  2. ENQUADRAMENTO / ESTADO DA ARTE
@@ -298,16 +301,18 @@ Este relatório está estruturado da seguinte forma:
 #pagebreak()
 = Estado da Arte e Enquadramento <enquadramento-soa>
 
-== O Logarithmic Number System
+== Estado da Arte
+
+#heading(level: 3, outlined: false)[O Logarithmic Number System]
 
 No LNS, um número real não nulo $x$ é representado por
 um bit de sinal $S_x$ e um logaritmo binário de vírgula
 fixa $L_x$ em complemento para dois:
 
 $
-S_x = cases(1 "se" x < 0, 0 "se" x >= 0)
-quad L_x = log_2(|x|)
-quad x = (-1)^(S_x) dot 2^(L_x)
+S_x = bb(1)[x < 0]
+quad quad L_x = log_2(|x|)
+quad quad x = (-1)^(S_x) dot 2^(L_x)
 $
 
 O expoente $L_x$ é um número de vírgula fixa em complemento
@@ -318,15 +323,28 @@ o que confere ao LNS maior densidade de representação na
 gama $[-1, 1]$ — precisamente onde se concentram os pesos
 típicos de redes neuronais treinadas.
 
-Esta representação transforma várias operações em
-operações mais simples.
+Segue-se a tabela com a transformação das operações em
+LNS:
 
-$
-z = x dot y quad &=> quad L_z = L_x + L_y, quad S_z = S_x xor S_y \
-z = x / y quad   &=> quad L_z = L_x - L_y, quad S_z = S_x xor S_y \
-z = x^(2^n) quad &=> quad L_z = L_x << n, quad S_z = 0 quad (forall n >= 1) \
-z = x^(2^(-n)) quad &=> quad L_z = L_x >> n, quad S_z = S_x quad (forall x >= 0)
-$
+#align(center)[
+  #set text(size: 12pt)
+  #table(
+    columns: (0.4fr, 0.5fr, 1fr, 0.6fr),
+    inset: 0.4em,
+    stroke: 0.3pt + luma(180),
+    fill: (x, y) => if y == 0 { rgb("#8cBdDa") } else { luma(248) },
+    
+    table.header(
+      [*$z$*], [*$S_z$*], [*$L_z$*], [*Condição*]
+    ),
+    [$x + y$],      [$S_x$],          [$L_x + log_2(1 plus 2^(L_y - L_x))$],   [$forall x, y, abs(x) > abs(y)$],
+    [$x - y$],      [$S_x$],          [$L_x + log_2(1 minus 2^(L_y - L_x))$],  [$forall x, y, abs(x) > abs(y)$],
+    [$x dot y$],    [$S_x xor S_y$],  [$L_x + L_y$],                           [$forall x, y$],
+    [$x div y$],      [$S_x xor S_y$],  [$L_x - L_y$],                           [$forall x, y$],
+    [$x^(2^n)$],    [$0$],            [$L_x << n$],                            [$forall n > 1$],
+    [$x^(2^(-n))$], [$0$],            [$L_x >> n$],                            [$forall n > 1, x >= 0$],
+  )
+]
 
 A multiplicação reduz-se a uma adição inteira dos expoentes,
 a divisão a uma subtração e as potências ou raízes de base 2 a meros
@@ -345,12 +363,14 @@ Para $z = x plus.minus y$ com $|x| >= |y|$,
 a derivação parte de:
 
 $
-z = x plus.minus y => L_z &= log_2(|x plus.minus y|), quad S_z = S_x \
+z = x plus.minus y => L_z &= log_2(|x plus.minus y|) \
 &= log_2(|2^(L_x) plus.minus 2^(L_y)|) \
 &= log_2(2^(L_x) dot |1 plus.minus 2^(L_y - L_x)|) \
 &= L_x + log_2(|1 plus.minus 2^(L_y - L_x)|) \
 &= L_x + log_2(1 plus.minus 2^(L_y - L_x)) \
 $
+
+#pagebreak()
 
 Definindo $t = L_y - L_x <= 0$ (garantido por troca 
 de operandos se necessário), introduz-se a chamada 
@@ -367,14 +387,12 @@ $
 f^-(t) = log_2(1 - 2^t), quad t in (-infinity, 0)
 $
 
-#pagebreak()
-
 A função $f^+$ é suave e limitada em $(-oo, 0]$.
 Cresce monotonicamente de $0$ quando $t -> -oo$ até $1$
 em $t = 0$. As suas primeira e segunda derivadas são:
 
 $
-(f^+)' (t) = 2^t / (1 + 2^t), quad (f^+)'' (t) = ln(2) dot 2^t / (1 + 2^t)^2
+(dif)/(dif t) f^+(t) = 2^t / (1 + 2^t), quad (dif^2)/(dif t^2) f^+(t) = ln(2) dot 2^t / (1 + 2^t)^2
 $
 
 Ambas são sempre positivas, monotonicamente crescentes,
@@ -388,7 +406,7 @@ Quando $t -> 0^-$, tem-se $f^-(t) -> -oo$, devido à
 singularidade do logaritmo em zero. As suas derivadas:
 
 $
-(f^-)' (t) = -2^t / (1 - 2^t), quad (f^-)'' (t) = -ln(2) dot 2^t / (1 - 2^t)^2
+(dif)/(dif t) f^-(t) = -2^t / (1 - 2^t), quad (dif^2)/(dif^2 t) f^-(t) = -ln(2) dot 2^t / (1 - 2^t)^2
 $
 
 são sempre negativas e divergem para $-infinity$
@@ -403,28 +421,28 @@ entradas de LUT do que $f^+$ devido à singularidade em
 $t = 0$, explorando ainda compromissos entre dimensão das
 tabelas e precisão, o que motiva directamente a representação
 XMB adoptada. O autor cataloga as principais dificuldades
-— nomeadamente a complexidade das funções de correcção $f^+$
+— nomeadamente a complexidade das funções de correção $f^+$
 e $f^-$ — e revê estratégias para a sua avaliação eficiente.
 A avaliação eficiente destas funções é o principal desafio de
 implementação do LNS. As derivações detalhadas encontram-se em
 `docs/docs.pdf` no repositório do projecto.
 
-== Estado da Arte
+#pagebreak()
 
-=== LNS em Aceleração de Redes Neuronais
+#heading(level: 3, outlined: false)[LNS em Aceleração de Redes Neuronais]
 
 Christ et al. @christ2022 apresentam uma unidade LNS de baixa
 precisão para aceleradores de redes neuronais em FPGA Kintex-7,
 obtendo degradação de apenas 3% na precisão top-1 no MNIST com
 12 500 a 14 000 LUTs. A arquitectura partilha o objectivo de
-minimizar o custo das funções de correcção via LUTs de dimensão
+minimizar o custo das funções de correção via LUTs de dimensão
 reduzida. A diferença central é de escala: enquanto Christ et al.
 @christ2022 focam redes convolucionais compactas, o presente
 trabalho estende a análise para inferência em modelos Llama 2
 (stories15M e stories42M), com cargas de trabalho
 substancialmente mais intensas.
 
-=== Formatos Alternativos: Posits e Microscaling
+#heading(level: 3, outlined: false)[Formatos Alternativos: Posits e Microscaling]
 
 Wu et al. @wu2025 apresentam o PPU, uma extensão RISC-V para
 aritmética posit vectorial. Os posits oferecem maior precisão
@@ -441,7 +459,7 @@ de até 3,4× face ao `fp32` em multiplicações de matrizes. Estes
 formatos são ortogonais ao LNS e poderiam, em princípio,
 ser combinados.
 
-=== Compressão e Quantização de LLMs
+#heading(level: 3, outlined: false)[Compressão e Quantização de LLMs]
 
 Han et al. @han2015 demonstraram que redes neuronais profundas
 toleram quantização agressiva dos pesos sem degradação
@@ -456,7 +474,140 @@ conversão directa confirma que o `lns16 Q8.7` é uma alternativa
 prática ao `bf16` para inferência em dispositivos de recursos
 limitados.
 
-== Ferramentas e Tecnologias
+#pagebreak()
+
+== Enquadramento
+
+#heading(level: 3, outlined: false)[Representações XF e XMB]
+
+O trabalho anterior aproximou $f^+$ e $f^-$ com
+piecewise splines lineares gerados por um algoritmo greedy.
+Dado um conjunto de $n+1$ pontos $\{(x_k, f_k)\}_{k=0}^{n}$,
+a fórmula da interpolação de um spline linear para
+um intervalo $[x_(k-1),x_k]$ é:
+
+$ "LS"_k (x) = ((x_k - x) f_(k-1) + (x - x_(k-1)) f_k) / h_k, quad h_k = x_k - x_(k-1) $ <eq:xf>
+
+Isto é a representação XF. Uma forma equivalente é:
+
+$ "LS"_k (x) = m_k dot.c x + b_k, quad m_k = (f_k - f_(k-1))/h_k, quad b_k = (f_(k-1) x_k - f_k x_(k-1))/h_k $ <eq:xmb>
+
+Esta é a representação XMB. Precomputa o declive $m_k$ e a
+interceção $b_k$ por intervalo, reduzindo a avaliação em
+runtime a um simples multiply-add. O trade-off é o
+aumento no uso da memória: XF requere $4 dot (n + 1)$ bytes
+para o `lns16`, enquanto o XMB requere $6 dot (n + 1)$ bytes.
+
+A fórmula para o upper bound do error de um spline linear é:
+
+$
+epsilon <= 1/8 max_[a,b] |f''(x)| h_i^2
+$
+
+#heading(level: 3, outlined: false)[Formatos Suportados]
+
+#figure(
+  table(
+    columns: (auto, auto, auto, auto, auto),
+    stroke: 0.3pt + luma(180),
+    inset: 6pt,
+    align: center,
+    fill: (x, y) => if y == 0 { rgb("#8cBdDa") } else { luma(248) },
+
+    table.header(
+      [*Formato*], [*$S_x$ (Sinal)*], [*$L_x_i$ (Inteira)*], [*$L_x_f$ (Fracionária)*], [*Intervalo*],
+    ),
+    [`lns8 Q4.3`],  [1], [4], [3], [$2^(-8)$ a $2^(7.875)$],
+    [`lns16 Q8.7`], [1], [8], [7], [$2^(-128)$ a $2^(127.992)$],
+  ),
+  caption: [Especificações dos formatos LNS suportados.],
+) <tab_formatos>
+
+O formato `lns16 Q8.7` tem 7 bits de mantissa efectiva,
+o mesmo que o `bf16`, tornando a comparação directa
+entre os dois formatos particularmente relevante.
+
+#heading(level: 3, outlined: false)[Erros dos Splines de Aproximação]
+
+A fórmula dos erros para o spline de aproximação das
+funcões $f^+$ e $f^-$ são:
+
+$
+epsilon_k^+ <= (ln(2) dot.c 2^(x_k) dot.c h_k^2) / (8(1 plus 2^(x_k))^2)
+
+quad quad
+
+epsilon_k^- <= (ln(2) dot.c 2^(x_k) dot.c h_k^2) / (8(1 minus 2^(x_k))^2)
+$
+
+Como a upper bound é monótona e crescente para ambas as
+funções, o intervalo a separar em dois é sempre aquele com maior
+$h_k$ ponderado pela curvatura local. O mínimo tamanho de
+intervalo permitido é $2 dot 2^(-f)$, onde $f$ é a parte
+fracionária do formato LNS.
+
+#pagebreak()
+
+#heading(level: 3, outlined: false)[Algoritmo Greedy]
+
+O algoritmo greedy começa com as duas extremidades do
+intervalo inicial $[-8, 0)$. 
+Iterativamente adiciona o ponto intermédio do intervalo
+com maior estimativa de erro. Tanto para `lns8 Q4.3` 
+como para `lns16 Q8.7`, $f^(plus.minus)(-8)$ é um 
+número que ambos os formatos não conseguem
+representar.
+
+#figure(
+  align(left)[
+    #set text(font: "Liberation Mono", size: 9pt)
+    #block(
+      width: 100%,
+      stroke: 0.5pt + luma(150),
+      inset: 10pt,
+      radius: 4pt,
+      fill: luma(250),
+    )[
+      #set par(justify: false)
+      *Algorithm* GreedySplineSelection($X, Y, M, B, S, f, epsilon$) \
+      *Inputs*: Empty sequence $X$, Empty sequence $Y$,
+      Empty sequence $M$, Empty sequence $B$,
+      target size $S$,
+      target function $f$, error metric $epsilon$ \
+      *Output*: Optimized spline table $T$
+      #line(length: 100%, stroke: 0.3pt + gray)
+
+      #let ind(n) = h(n * 1em)
+      #let comment(c) = h(5pt) + text(fill: gray, style: "italic")[▷ #c]
+
+      #set enum(numbering: "1.", indent: 0pt)
+
+      #enum.item(1)[$X <- ["start", "end"]$]
+      #enum.item(2)[*while* $|X| < S$ *do*]
+      #enum.item(3)[#ind(1) *for* $j <- 1$ *to* $|X| - 1$ *do*]
+      #enum.item(4)[#ind(2) $h_j <- X_(j+1) - X_j$]
+      #enum.item(5)[#ind(2) $e_j <- epsilon(X_j, h_j)$]
+      #enum.item(6)[#ind(1) *end for*]
+      #enum.item(7)[#ind(1) $"max_j" <- arg max_j (e_j) " where " h_j > 2 dot 2^(-f)$]
+      #enum.item(8)[#ind(1) $X_("new") <- X_"max_j" + (h_"max_j" >> 1)$]
+      #enum.item(9)[#ind(1) $X_("max_j"+1) <- x_("new")$]
+      #enum.item(10)[*end while*]
+      #v(0.4em)
+      #enum.item(11)[*for* $i <- 1$ *to* $|X|$ *do*]
+      #enum.item(12)[#ind(1) $Y_i <- f(X_i)$ #comment[valor da ordenada $y$ do ponto do formato XF]]
+      #enum.item(13)[*end for*]
+      #v(0.4em)
+      #enum.item(14)[*for* $i <- 2$ *to* $|X|$ *do*]
+      #enum.item(15)[#ind(1) $k <- floor(log_2(X_i - X_(i-1)))$]
+      #enum.item(16)[#ind(1) $M_i <- (X_i - X_(i-1)) >> k$ #comment[valor do declive $m$ do formato XMB]]
+      #enum.item(17)[#ind(1) $B_i <- Y_i - ((M_i dot.c X_i) >> k)$ #comment[valor da ordenada na origem $b$ do formato XMB]]
+      #enum.item(18)[*end for*]
+    ]
+  ],
+  caption: [Pseudocódigo do Algoritmo Greedy para Tabelas Spline],
+) <alg-greedy-spline-clean>
+
+#heading(level: 3, outlined: false)[Ferramentas e Tecnologias]
 
 O desenvolvimento foi realizado em C++ standard,
 sem dependências externas além da biblioteca
@@ -474,74 +625,6 @@ inferência são da família _TinyStories_ @karpathy2023
 (stories15M e stories42M), baseados na arquitectura
 Llama 2.
 
-== Enquadramento
-
-=== Representações XF e XMB
-
-O trabalho anterior aproximou $f^+$ e $f^-$ com
-piecewise splines lineares gerados por um algoritmo greedy.
-Dado um conjunto de $n+1$ pontos $\{(x_i, f_i)\}_{i=0}^{n}$,
-a fórmula da interpolação de um spline linear para
-um intervalo $[x_(i-1),x_i]$ é:
-
-$ "LS"_i (x) = ((x_i - x) f_(i-1) + (x - x_(i-1)) f_i) / h_i, quad h_i = x_i - x_(i-1) $ <eq:xf>
-
-Isto é a representação XF. Uma forma equivalente é:
-
-$ "LS"_i (x) = m_i dot.c x + b_i, quad m_i = (f_i - f_(i-1))/h_i, quad b_i = (f_(i-1) x_i - f_i x_(i-1))/h_i $ <eq:xmb>
-
-Esta é a representação XMB. Precomputa o declive $m_i$ e a
-interceção $b_i$ por intervalo, reduzindo a avaliação em
-runtime a um simples multiply-add. O trade-off é o
-aumento no uso da memória: XF requere $4 dot (n + 1)$ bytes
-para o `lns16`, enquanto o XMB requere $6 dot (n + 1)$ bytes.
-
-A fórmula para o upper bound do error de um spline linear é:
-
-$
-epsilon <= 1/8 max_[a,b] |f''(x)| h_i^2
-$
-
-
-=== Algoritmo Greedy
-
-O algoritmo greedy começa com as duas extremidades do
-intervalo inicial ($[-8, 0)$) e
-iterativamente adiciona o ponto intermédio do intervalo
-com maior estimativa de erro:
-
-$
-epsilon_i^+ <= (ln(2) dot.c 2^(x_i) dot.c h_i^2) / (8(1 plus 2^(x_i))^2)
-
-\
-
-epsilon_i^- <= (ln(2) dot.c 2^(x_i) dot.c h_i^2) / (8(1 minus 2^(x_i))^2)
-$
-
-Como a upper bound é monótona e crescente para ambas as
-funções, o intervalo a separar em dois é sempre aquele com maior
-$h_i$ ponderado pela curvatura local. O mínimo tamanho de
-intervalo permitido é $2 dot 2^(-f)$, onde $f$ é a parte
-fracionária do formato LNS.
-
-=== Formatos Suportados
-
-#figure(
-  table(
-    columns: (auto, auto, auto, auto, auto),
-    stroke: 0.5pt,
-    inset: 6pt,
-    align: center,
-    [*Formato*], [*Bit de sinal*], [*Bits inteiros*], [*Bits fraccionários*], [*Gama de valores*],
-    [`lns8 Q4.3`],  [1], [4], [3], [$2^(-8)$ a $2^(7.875)$],
-    [`lns16 Q8.7`], [1], [8], [7], [$2^(-128)$ a $2^(127.992)$],
-  ),
-  caption: [Especificações dos formatos LNS suportados.],
-) <tab_formatos>
-
-O formato `lns16 Q8.7` tem 7 bits de mantissa efectiva,
-o mesmo que o `bf16`, tornando a comparação directa
-entre os dois formatos particularmente relevante.
 
 // ════════════════════════════════════════════════════════════
 //  3. DESCRIÇÃO DO TRABALHO
@@ -550,15 +633,42 @@ entre os dois formatos particularmente relevante.
 #pagebreak()
 = Descrição do Trabalho <work-description>
 
+Esta secção apresenta uma descrição detalhada do
+trabalho desenvolvido no decurrer do estágio, o qual
+teve como objetivo principal dar continuidade e
+aprofundar o ecossistema computacional planeado,
+focando-se em quatro partes fundamentais.
+Inicialmente, o trabalho centrou-se em
+#link(<comp-and-conv>)[adicionar operações de
+comparação e conversão] entre os formatos FP/BF e
+LNS. De forma a estabelecer uma base prática
+de exploração do formato, procedeu-se à
+#link(<lns-lib>)[criação de uma biblioteca de
+emulação LNS]. Subsequentemente, realizou-se uma
+análise rigorosa para
+#link(<comparacao-lns-bfloat>)[comparar o LNS ao BF]
+em termos de precisão aritmética recorrendo a
+testes estatísticos. Por fim, este ecossistema foi
+validado ao #link(<llm-inf>)[suportar inferência em
+LLMs], focando-se especificamente na arquitetura
+Llama 2.
+
 == Comparações em LNS e Conversão FP/BF $<->$ LNS <comp-and-conv>
 
-=== Comparações em LNS
+#heading(level: 3, outlined: false)[Comparações em LNS]
 
 Sejam $x$ e $y$ dois operandos, podemos estabelecer as
 seguintes 5 comparações:
-$x < y, x <= y, x = y, x >= y, x > y$,
+
+$
+x < y, quad x <= y, quad x = y, quad x >= y, quad x > y
+$
+
 com apenas duas delas:
-$x < y$ e $x = y$.
+
+$
+x < y " e " x = y
+$
 
 Para determinar se $x$ é igual a $y$, basta comparar os bits
 um a um, logo, é equivalente a fazer uma comparação de
@@ -568,22 +678,22 @@ Para determinar se $x$ é menor do que $y$:
 
 $
 "LNS-LessThan"(x, y) = cases(
-  "true"                   & "se" "sign"(x) = 1 and "sign"(y) = 0,
+  "true"                        & "se" "sign"(x) = 1 and "sign"(y) = 0,
   "exponent"(x) > "exponent"(y) & "se" "sign"(x) = "sign"(y) = 1,
   "exponent"(x) < "exponent"(y) & "se" "sign"(x) = "sign"(y) = 0,
-  "false"                  & "caso contrário"
+  "false"                       & "caso contrário"
 )
 $
 
 As restantes comparações são estabelecidas através de
 rescritas das inequações:
 $
-x <= y &<=> x < y or x = y \
-x >= y &<=> y <= x \
-x > y &<=> y < x \
+x <= y &<=> x < y or x = y quad quad
+x >= y &<=> y <= x quad quad
+x > y &<=> y < x
 $
 
-=== Funções de Conversão FP/BF ↔ LNS
+#heading(level: 3, outlined: false)[Funções de Conversão FP/BF ↔ LNS]
 
 Uma componente importante do trabalho foi a análise formal
 das funções de conversão entre FP e LNS.
@@ -594,11 +704,11 @@ o que define as funções de conversão:
 
 $
 "float2lns"(S_x, e_x, m_x) := (-1)^(S_x) dot (e_x - 127 + log_2(1 + m_x)) \
-"lns2float"(S_x, L_i_x, L_f_x) := (-1)^(S_x) dot (1 + (2^(L_f_x) - 1)) dot 2^(L_i_x + 127)
+"lns2float"(S_x, L_x_i, L_x_f) := (-1)^(S_x) dot (1 + (2^(L_x_f) - 1)) dot 2^(L_x_i + 127)
 $
 
 Ambas as expressões não lineares das funções de conversão, 
-$log_2(1 + m_x)$ e $2^(L_f_x) - 1$, 
+$log_2(1 + m_x)$ e $2^(L_x_f) - 1$, 
 têm domínio $[0, 1)$ e podem ser
 aproximadas com splines lineares. Os upper bounds do erro
 correspondentes foram derivados analiticamente, seguindo
@@ -607,9 +717,7 @@ logarítmicas:
 
 $
 epsilon_"float2lns" <= 1/8 dot 1/(ln(2)) dot 1/((1 + x_(i-1))^2) dot h_i^2
-$
-
-$
+quad quad quad
 epsilon_"lns2float" <= 1/8 dot ln(2) dot 2^(2 x_i) dot h_i^2
 $
 
@@ -617,10 +725,9 @@ $
 //  SECÇÃO 3.2 — Biblioteca de Emulação LNS
 // ═══════════════════════════════════════════════════════════════
 
-#pagebreak()
 == Biblioteca de Emulação LNS <lns-lib>
 
-=== Arquitectura da Biblioteca
+#heading(level: 3, outlined: false)[Arquitectura da Biblioteca]
 
 A biblioteca de emulação LNS é implementada como um conjunto de
 cabeçalhos C++ auto-contidos que partilham a mesma interface template
@@ -667,7 +774,16 @@ contra uma versão de maior precisão de si próprio.
 
 A biblioteca pode ser integrada em qualquer projecto C++ com uma única
 directiva `#include`, sem dependências externas e sem sistema de build
-específico.
+específico. 
+
+Todas as interfaces mencionadas encontram-se no #link(<anexo-apis>)[Anexo].
+
+A geração das tabelas usadas pelos formatos de `lns` de $8$ e $16$
+bits é feita por uma custom tool chamada `spline`. Esta gera-as
+para ficheiros binários `.lns` e permite a customização do diretório
+em que os escreve. A descrição do formato do ficheiro das tabelas e
+exemplo de utilização da ferramenta para geração encontra-se
+no #link(<anexo-spline>)[Anexo].
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -677,34 +793,31 @@ específico.
 #pagebreak()
 == Comparação de Precisão Aritmética: LNS vs. BF <comparacao-lns-bfloat>
 
-=== Metodologia
+#heading(level: 3, outlined: false)[Metodologia]
 
-Foi desenvolvido um benchmark abrangente (`bench/`) que compara
+Foi desenvolvido um benchmark abrangente (`examples/bench/`) que compara
 a precisão aritmética de LNS e BF nos pares `lns8`/`bf8` e `lns16`/`bf16`,
-cobrindo duas dimensões: precisão por banda de magnitude em cinco
-operações aritméticas (Benchmark 1) e precisão em nove testes
-numéricos de nível algorítmico (Benchmark 2).
+cobrindo duas dimensões: precisão por intervalos em quatro
+operações aritméticas e round-trip (Benchmark 1) e precisão em nove 
+kernels (Benchmark 2).
 
-==== Benchmark 1 — Precisão por Banda de Magnitude
+#heading(level: 4, outlined: false, numbering: none)[Benchmark 1 — Operações Aritméticas e Round-Trip]
 
 As cinco operações avaliadas são: conversão e retorno (_round-trip_),
-multiplicação, divisão, adição e subtracção, parametrizadas por bandas
-de magnitude $["lo", "hi"]$ (potências de dois consecutivas). Dentro de
-cada banda, os operandos são amostrados log-uniformemente para evitar
-acumulação em fronteiras de potências de dois.
+multiplicação, divisão, adição e subtracção, parametrizadas por intervalos $["lo", "hi"]$ (potências de dois consecutivas). 
 
-A métrica primária é diferenciada por operação: erro relativo médio
-(`avg_rel`) para round-trip, multiplicação e divisão (invariante à
-escala); erro absoluto médio (`avg_abs`) para adição e subtracção, onde
+A métrica primária é diferenciada por operação: erro relativo médio (MRE)
+para round-trip, multiplicação e divisão (invariante à
+escala); erro absoluto médio (MAE) para adição e subtracção, onde
 o erro relativo diverge em situações de cancelamento. Aplica-se um filtro
 de cancelamento: pares em que
-$|a + b| < 2^{-f} dot max(|a|, |b|)$
+$|a + b| < 2^(-f) dot max(|a|, |b|)$
 são descartados, onde $f$ é o número de bits fraccionários.
 
 Os vencedores são determinados por teste Mann-Whitney U bilateral com
 $n = 100,000$ amostras ($p < 0.01$, $|r| >= 0.05$).
 
-==== Benchmark 2 — Testes Numéricos
+#heading(level: 4, outlined: false, numbering: none)[Benchmark 2 — Kernels]
 
 Nove testes de nível algorítmico: progressão geométrica, norma
 euclidiana, série harmónica alternada (Leibniz), acumulação da
@@ -717,97 +830,15 @@ o `bf16` tem soma acumulada apenas com `fp32`.
 Empates declarados quando a diferença relativa entre erros é 
 inferior a 5%.
 
-=== Resultados e Análise
-
-==== Benchmark 1 — Erro por Banda
-
-#figure(
-  image("results/ops_errors.png", width: 100%),
-  caption: [Erro relativo e absoluto médio por banda para cada operação e par de
-    formatos. \ ($p$ é o número de bits da parte inteira do exponte em LNS — 
-    $2^(-p + 1)$ é o número mais pequeno que ambos os formatos conseguem 
-    representar)],
-) <fig_ops_errors>
-
-O erro relativo é aproximadamente invariante à banda 
-para todos os formatos; a diferença LNS/BF é 
-essencialmente constante ao longo das décadas de magnitude. 
-
-O erro absoluto cresce com a magnitude para
-todos os formatos. Os gráficos de adição, subtracção,
-multiplicação e round-trip mostram o erro absoluto de 
-ambos os formatos a crescer,
-consistente com a acumulação de erro na 
-correcção de adição em log-space.
-
-
-
-==== Benchmark 1 — Heatmaps de Vencedor por Operação × Banda
-
-#figure(
-  image("results/ops_heatmap_combined_rel_abs.png", width: 100%),
-  caption: [Comparação de heatmaps de vencedor por operação × banda para os formatos de 8 bits (`lns8` vs `bf8`). À esquerda: erro relativo médio; À direita: erro absoluto médio.],
-) <fig_heatmaps>
-
-Em erro relativo e absoluto, o `bf8` vence em todas as três bandas sem empates. 
-O resultado de multiplicação e divisão é digno de nota: embora a aritmética LNS 
-seja exata no expoente e o `bf8` sofra com apenas 3 bits de mantissa, 
-este permanece mais preciso. Adicionalmente, 
-o resultado de adição e subtracção confirma a fraqueza conhecida do LNS, onde o 
-termo de correcção aproximado por tabela introduz um erro que a adição directa 
-do `bf8` não sofre.
-
-Em erro absoluto, o `lns16` vence a multiplicação em 7 das 8 bandas e a
-divisão em todas as 8; o `bf16` vence adição e subtracção em todas as
-bandas. Em erro relativo, o `bf16` inverte o resultado na multiplicação.
-Esta inversão é significativa: o `lns16` é preferível quando os operandos
-permanecem numa gama limitada e a fidelidade absoluta importa; o `bf16`
-é preferível quando a precisão relativa tem de ser mantida num intervalo
-dinâmico amplo.
-
-
-
-==== Benchmark 2 — Testes Numéricos
-
-#figure(
-  image("results/numerical_rel.png", width: 100%),
-  caption: [Erro relativo dos testes numéricos para todos os formatos.
-    Os empates são anotados quando a diferença relativa entre lns e bf é
-    inferior a 5%.],
-) <fig_numerical_rel>
-
-#figure(
-  image("results/numerical_abs.png", width: 100%),
-  caption: [Erro absoluto dos testes numéricos para todos os formatos.
-    Os empates são anotados quando a diferença relativa entre lns e bf é
-    inferior a 5%.],
-) <fig_numerical_abs>
-
-Os resultados numéricos são consistentes com a avaliação
-das operações por banda: em qualquer workload dominado
-pela subtração ou adição, a adição corretamente
-arredondada do `bf16` dá-lhe uma vantagem visível. As
-variantes de acumulação em 32 bits mostram que esta
-diferença é praticamente devida à precisão na acumulação
-em vez do formato: `lns16_lns32_acc` e `lns16_f32acc`
-recuperam bastante em testes como `pi2_over6`, 
-`softmax_sum` e `rmsnorm_denom`. Em variantes de
-puras sequências de multiplicação as variantes de 16 bits
-em LNS têm melhor precisão do que BF, no entanto, em
-8 bits empatam (`geometric_progression`).
-
-// ═══════════════════════════════════════════════════════════════
-//  SECÇÃO 3.4 — Inferência na Arquitectura Llama 2
-// ═══════════════════════════════════════════════════════════════
 
 #pagebreak()
 == Inferência na Arquitectura Llama 2 <llm-inf>
 
-=== Conversão de Modelos `fp32` para `lns16` e `bf16`
+#heading(level: 3, outlined: false)[Conversão de Modelos `fp32` para `lns16` e `bf16`]
 
 Foram desenvolvidas duas ferramentas de conversão de pesos 
 em
-`tinystories/convert/`: `convert_lns16.cpp` e 
+`examples/tinystories/convert/`: `convert_lns16.cpp` e 
 `convert_bf16.cpp`.
 Ambas operam em modo de streaming em lotes de 4096 
 pesos de cada vez,
@@ -832,9 +863,9 @@ da representação
 `fp32`, mantendo sinal, 8 bits de expoente e 7 bits 
 de mantissa.
 
-=== Inferência `lns16` vs `bf16`
+#heading(level: 3, outlined: false)[Inferência `lns16` vs `bf16`]
 
-O ficheiro `tinystories/tiny/tiny_lns16.cpp` implementa o 
+O ficheiro `examples/tinystories/tiny/tiny_lns16.cpp` implementa o 
 ciclo
 completo de inferência do transformer Llama 2 usando 
 exclusivamente
@@ -863,24 +894,128 @@ matrizes — sem incorrer na instabilidade numérica da
 acumulação
 puramente logarítmica.
 
-Um processo equivalente ocorreu com o ficheiro `tinystories/tiny/tiny_lns16_lns32acc.cpp`
+Um processo equivalente ocorreu com o ficheiro `examples/tinystories/tiny/tiny_lns16_lns32acc.cpp`
 em que, em vez de usar `fp32` para a acumulação da soma, usou-se a simulação
 de `lns32` (drop-in replacement).
-
 Foi também estado todos os modelos com `bf16` com acumulação da soma em `fp32`
-(ficheiro `tinystories/tiny/tiny_bf16.cpp`).
+(ficheiro `examples/tinystories/tiny/tiny_bf16.cpp`).
 
-É de realçar que, sem a acumulação da soma com `fp32` em `bf16` e `lns16`, os modelos não 
+É de realçar que, sem a acumulação da soma com `fp32`/`lns32` em `bf16` e `lns16`, os modelos não 
 conseguiam dar output lógico de texto.
 
-=== Inferência `lns8` vs `bf8`
+#heading(level: 3, outlined: false)[Inferência `lns8` vs `bf8`]
 
 Inferência com ambos os formatos de 8 bits foi testada, mas
 o output do modelo era ou a repetição do mesmo token ou
-acabava numa divisão por zero, caso do `lns8`.
+acabava numa divisão por zero, caso do `lns8`. A precisão 
+destes formatos é muito baixa e, como os modelos são relativamente
+pequenos, afeta bastante a computação.
 
 #pagebreak()
-=== Resultados de Inferência
+
+= Resultados e Análise <sec-resultados>
+
+Esta secção apresenta e discute os resultados obtidos
+nos testes experimentais, estruturando-se em dois
+eixos principais de avaliação. Primeiro, expõe-se uma
+análise comparativa detalhada da precisão aritmética
+entre os formatos LNS e BF. Segundo, demonstra-se a viabilidade
+prática destes formatos através da sua aplicação direta
+na inferência de modelos de linguagem da arquitetura
+Llama 2.
+
+== Comparação de Precisão Aritmética: LNS vs. BF
+
+#align(center)[
+  #heading(level: 4, outlined: false, numbering: none)[Benchmark 1 — Operações Aritméticas e Round-Trip]
+]
+
+#v(10pt)
+
+#figure(
+  image("results/ops_errors.png", width: 100%),
+  caption: [Erro relativo e absoluto médio por intervalo para cada operação e par de
+    formatos. \ ($p$ é o número de bits da parte inteira do exponte em LNS — 
+    $2^(-p + 1)$ é o número mais pequeno que ambos os formatos conseguem 
+    representar)],
+) <fig_ops_errors>
+
+#pagebreak()
+
+O erro relativo é aproximadamente invariante ao intervalo 
+para todos os formatos; a diferença LNS/BF é 
+essencialmente constante ao longo dos intervalos. 
+
+O erro absoluto cresce com a magnitude para
+todos os formatos. Os gráficos de adição, subtracção,
+multiplicação e round-trip mostram o erro absoluto de 
+ambos os formatos a crescer,
+consistente com a acumulação de erro na 
+correção de adição em log-space.
+
+#figure(
+  image("results/ops_heatmap_combined_rel_abs.png", width: 100%),
+  caption: [Comparação de heatmaps de vencedor por operação × intervalo para os formatos de 8 bits (`lns8` vs `bf8`). À esquerda: erro relativo médio; À direita: erro absoluto médio.],
+) <fig_heatmaps>
+
+Em erro relativo e absoluto, o `bf8` vence em todos os três intervalos sem empates. 
+O resultado de multiplicação e divisão é digno de nota: embora a aritmética LNS 
+seja exata no expoente e o `bf8` sofra com apenas 3 bits de mantissa, 
+este permanece mais preciso. Adicionalmente, 
+o resultado de adição e subtracção confirma a fraqueza conhecida do LNS, onde o 
+termo de correção aproximado com a tabela introduz um erro que a adição directa 
+do `bf8` não sofre.
+
+Em erro absoluto, o `lns16` vence a multiplicação em 7 dos 8 intervalos e a
+divisão em todos os 8; o `bf16` vence adição e subtracção em todos os
+intervalos. Em erro relativo, o `bf16` inverte o resultado na multiplicação.
+Esta inversão é significativa: o `lns16` é preferível quando os operandos
+permanecem numa gama limitada e a fidelidade absoluta importa; o `bf16`
+é preferível quando a precisão relativa tem de ser mantida num intervalo
+dinâmico amplo.
+
+
+
+#align(center)[
+  #heading(level: 4, outlined: false, numbering: none)[Benchmark 2 — Kernels]
+]
+
+#v(10pt)
+
+#figure(
+  image("results/numerical_rel.png", width: 100%),
+  caption: [Erro relativo médio dos testes numéricos para todos os formatos.
+    Os empates são anotados quando a diferença relativa entre lns e bf é
+    inferior a 5%.],
+) <fig_numerical_rel>
+
+#figure(
+  image("results/numerical_abs.png", width: 100%),
+  caption: [Erro absoluto médio dos testes numéricos para todos os formatos.
+    Os empates são anotados quando a diferença relativa entre lns e bf é
+    inferior a 5%.],
+) <fig_numerical_abs>
+
+Os resultados numéricos são consistentes com a avaliação
+das operações por intervalo: em qualquer workload dominado
+pela subtração ou adição, a adição corretamente
+arredondada do `bf16` dá-lhe uma vantagem visível. As
+variantes de acumulação em 32 bits mostram que esta
+diferença é praticamente devida à precisão na acumulação
+em vez do formato: `lns16_lns32_acc` e `lns16_f32acc`
+recuperam bastante em testes como `pi2_over6`, 
+`softmax_sum` e `rmsnorm_denom`. Em variantes de
+puras sequências de multiplicação as variantes de 16 bits
+em LNS têm melhor precisão do que BF.
+Nos formatos de 8 bits, à uma maior competitividade, o `lns8`
+mostra-se por vezes melhor que o `bf8` ou equivalente. É de
+realçar também, que em `lns8`, as versões de acumulação em
+32 bits nem sempre melhoram o erro devido ao erro
+constante de conversão entre formatos.
+
+#pagebreak()
+
+== Inferência na Arquitetura Llama 2
 
 Todos os modelos foram corridos com os parâmetros
 default exceto o tokenizer que muda de acordo com
@@ -890,8 +1025,10 @@ o formato LNS/BF.
 #align(center)[
   #table(
     columns: 3,
+    stroke: 0.3pt + luma(180),
     align: center,
-    fill: (x, y) => if y == 0 { rgb("#8cBdDa") } else { none },
+    fill: (x, y) => if y == 0 { rgb("#8cBdDa") } else { luma(248) },
+
     table.header(
       [*Parâmetro*], [*Descrição*], [*Valor Default*],
     ),
@@ -919,9 +1056,11 @@ o formato LNS/BF.
   )
 ]
 
-==== Stories 15M
+#heading(level: 4, outlined: false, numbering: none)[Stories 15M]
 
-===== `lns16` (XF)
+#v(10pt)
+
+- `lns16` (XF)
 
 #rect(
   width: 100%,
@@ -937,7 +1076,7 @@ Her mom said, "Oh no, I'm sorry. We can't print it. But let's draw another one."
 Lily learned that sometimes things don't go the way we want them to, but it's important to keep trying and not give up._
 ]
 
-===== `lns16` (XMB)
+- `lns16` (XMB)
 
 #rect(
   width: 100%,
@@ -950,7 +1089,7 @@ Tim said, "Let's race our boats!" Sue agreed and they put their boats in the wat
 After a while, Tim felt tired. He said, "I'm hungry. Let's stop and eat." Sue agreed and they started to eat their lunch. They sat on the sand and watched the boats in the water. They had a fun day at the beach and went home happy._
 ]
 
-===== `bf16`
+- `bf16`
 
 #rect(
   width: 100%,
@@ -962,9 +1101,13 @@ After a while, Tim felt tired. He said, "I'm hungry. Let's stop and eat." Sue ag
 Lily's mom noticed her daughter was upset and asked her what was wrong. Lily explained that Max wouldn't let her play with his toys. Lily's mom talked to Max and told him that Lily was being mean. Max didn't listen and kept saying mean things. Lily felt better and decided to talk to Max. She told him that she didn't want to play with him and that it was okay to be mean. Max realized he was being mean and gave Lily a toy to play with. They both played together and had fun._
 ]
 
-==== Stories 42M
+#pagebreak()
 
-===== `lns16` (XF)
+#heading(level: 4, outlined: false, numbering: none)[Stories 42M]
+
+#v(10pt)
+
+- `lns16` (XF)
 
 #rect(
   width: 100%,
@@ -977,7 +1120,7 @@ One day, Tim's family decided to have a picnic in the park. They packed sandwich
 Suddenly, they heard a loud noise and saw a big wave coming towards them. They were scared because it was a storm. But then, the wave brought a big box with them. They opened the box and found a treasure! It was a big toy boat that Tim and his family could use. They were so happy and thanked the wave for bringing the treasure._
 ]
 
-===== `lns16` (XMB)
+- `lns16` (XMB)
 
 #rect(
   width: 100%,
@@ -990,7 +1133,7 @@ Lily was so excited to eat it, but then she saw something she didn't expect. The
 Her mom laughed and said, "Don't worry, Lily. It's just a melted ice cream. Let's go back to the kitchen and get more." Lily was happy to get more ice cream, but she knew she had to wait for it to melt away._
 ]
 
-===== `bf16`
+- `bf16`
 
 #rect(
   width: 100%,
@@ -1005,7 +1148,7 @@ The magic bird told Tim and Sam to close their eyes. When they opened them, they
 ]
 
 
-=== Análise
+#heading(level: 3, outlined: false)[Análise]
 
 A produção de texto coerente pelos modelos _TinyStories_ 
 após conversão
@@ -1027,7 +1170,7 @@ as limitações do formato.
 
 O LNS é inequivocamente superior em multiplicação e divisão — as
 operações dominantes em redes neuronais. No regime de 8 bits, o `bf8`
-vence o `lns8` em todas as operações em todas as bandas de magnitude testadas,
+vence o `lns8` em todas as operações em todos os intervalos testados,
 embora na multiplicação e divisão estas diferenças sejam menores; no
 regime de 16 bits, o `lns16` mantém vantagem consistente em divisão e em
 erro absoluto de multiplicação. A razão é estrutural: multiplicação e
@@ -1070,12 +1213,297 @@ acumulação.
 //  APÊNDICE
 // ════════════════════════════════════════════════════════════
 
-/*
 #pagebreak()
 
 #set heading(numbering: "A.1  ")
 #counter(heading).update(0)
 
-= Apêndice A — Estrutura do Repositório
-...
-*/
+= Anexo
+
+== APIs <anexo-apis>
+
+#heading(level: 3, outlined: false, numbering: none)[`#include <lns>`]
+
+```cpp
+template<u8 n>
+struct lns {
+  static constexpr u8 f_width =
+    n == 8  ? 3 :
+    n == 16 ? 7 :
+    n == 32 ? 19 : 47;
+
+  f32 bits;
+
+  lns();
+  lns(u32 raw);
+
+  explicit operator f32() const;
+
+  lns  operator+ (const lns other) const;
+  lns  operator- (const lns other) const;
+  lns  operator- ()                const;
+  lns  operator* (const lns other) const;
+  lns  operator/ (const lns other) const;
+
+  lns  sqrt      ()                const;
+
+  lns& operator+=(const lns other);
+  lns& operator-=(const lns other);
+  lns& operator*=(const lns other);
+  lns& operator/=(const lns other);
+
+  void operator= (const lns other) volatile;
+
+  bool operator==(const lns other) const;
+  bool operator!=(const lns other) const;
+  bool operator< (const lns other) const;
+  bool operator<=(const lns other) const;
+  bool operator> (const lns other) const;
+  bool operator>=(const lns other) const;
+
+  static inline lns  load (const void* addr, u32 imm = 0);
+  inline        void store(void* addr, u32 imm = 0) const;
+};
+
+using lns8  = lns<8>;
+using lns16 = lns<16>;
+using lns32 = lns<32>;
+using lns64 = lns<64>;
+```
+
+#pagebreak()
+
+#heading(level: 3, outlined: false, numbering: none)[`#include <lnssim>`]
+
+```cpp
+template<u8 n, u8 i, u8 f>
+struct lns {
+  uint_t<n> bits;
+
+  lns();
+  lns(uint_t<n> raw, bool);
+  lns(i32 x);
+  lns(f32 x);
+  template<u8 n2, u8 i2, u8 f2>
+  lns(const lns<n2, i2, f2>& other);
+
+  explicit operator f32() const;
+  explicit operator f64() const;
+
+  u8       sign()     const;
+  int_t<n> exponent() const;
+  bool     is_zero()  const;
+
+  lns operator+   (const lns other)   const;
+  lns operator-   (const lns other)   const;
+  lns operator-   ()                  const;
+  lns operator*   (const lns other)   const;
+  lns operator/   (const lns other)   const;
+
+  lns power2_pow  (const u8 k)        const;
+  lns power2_root (const u8 k)        const;
+
+  lns square      ()                  const;
+  lns sqrt        ()                  const;
+  lns exp         ()                  const;
+  lns sinh        ()                  const;
+  lns cosh        ()                  const;
+  lns tanh        ()                  const;
+
+  // ... (restantes operadores de atribuição e comparação)
+};
+```
+
+#pagebreak()
+
+#heading(level: 3, outlined: false, numbering: none)[`#include <bfloatsim>`]
+
+```cpp
+struct bf8 {
+  u8 bits; // E4M3: [S | EEEE | MMM]
+
+  bf8();
+  bf8(u8 raw, bool);
+  bf8(i32 x);
+  bf8(bf16 x);
+  bf8(f32 x);
+
+  operator f32() const;
+
+  inline bool operator== (const bf8 other) const;
+  inline bool operator<  (const bf8 other) const;
+  inline bool operator>  (const bf8 other) const;
+  inline bool operator<= (const bf8 other) const;
+  inline bool operator>= (const bf8 other) const; 
+
+  bf8 operator+          (const bf8 other) const; 
+  bf8 operator-          (const bf8 other) const; 
+  bf8 operator-          ()                const; 
+  bf8 operator*          (const bf8 other) const; 
+  bf8 operator/          (const bf8 other) const; 
+
+  // ... (restantes operadores de atribuição e comparação)
+};
+
+struct bf16 {
+  u16 bits; // E8M7: [S | EEEEEEEE | MMMMMMM]
+
+  bf16();
+  bf16(u16 raw, bool);
+  bf16(i32 x);
+  bf16(bf8 x);
+  bf16(f32 x);
+
+  inline operator f32() const;
+
+  inline bool operator== (const bf16 other) const;
+  inline bool operator<  (const bf16 other) const;
+  inline bool operator>  (const bf16 other) const;
+  inline bool operator<= (const bf16 other) const;
+  inline bool operator>= (const bf16 other) const; 
+
+  bf16 operator+          (const bf16 other) const; 
+  bf16 operator-          (const bf16 other) const; 
+  bf16 operator-          ()                const; 
+  bf16 operator*          (const bf16 other) const; 
+  bf16 operator/          (const bf16 other) const; 
+
+  // ... (restantes operadores de atribuição e comparação)
+};
+```
+
+#pagebreak()
+
+== Spline <anexo-spline>
+
+Os ficheiros `.lns` guardam os dados de interpolação em formato binário bruto (_raw binary_) em modo _Little-Endian_, prontos a serem mapeados diretamente para a memória do simulador.
+
+#heading(level: 3, outlined: false, numbering: none)[Cabeçalho Fixo (16 bytes)]
+O ficheiro começa sempre com quatro inteiros de 32 bits sem sinal (`u32`) que definem o número de linhas (nós) de cada sub-tabela:
+
+#align(center)[
+  #set text(size: 10pt)
+  #table(
+    columns: (1fr, 1fr, 1fr, 1fr),
+    inset: 0.8em,
+    stroke: 0.5pt + luma(150),
+    fill: (x, y) => if y == 0 { luma(220) } else { luma(250) },
+    table.header([*Bytes 0 a 3*], [*Bytes 4 a 7*], [*Bytes 8 a 11*], [*Bytes 12 a 15*]),
+    [`s_plus` (u32)], [`s_minus` (u32)], [`s_f2l` (u32)], [`s_l2f` (u32)],
+    [Tam. Adição], [Tam. Subtração], [Tam. FP $arrow$ LNS], [Tam. LNS $arrow$ FP]
+  )
+]
+
+#heading(level: 3, outlined: false, numbering: none)[Layout do Payload (Dados Sequenciais)]
+
+Após o cabeçalho, os dados das tabelas surgem de forma contígua na seguinte ordem:
+#align(center)[
+  #highlight(fill: rgb("e0f2fe"))[`spline_plus`] $arrow$ 
+  #highlight(fill: rgb("fee2e2"))[`spline_minus`] $arrow$ 
+  #highlight(fill: rgb("fef08a"))[`spline_f2l`] $arrow$ 
+  #highlight(fill: rgb("bbf7d0"))[`spline_l2f`]
+]
+
+O formato e o tamanho de cada registo dentro das tabelas dependem da precisão (`LNS16`/`LNS8`) e do modo de cálculo (`XF`/`XMB`):
+
+#align(center)[
+  *Modo XF* (Interpolação por Coordenadas): *2/4 bytes por linha*:
+  #table(
+    columns: (2cm, 2cm),
+    inset: 0.5em,
+    stroke: 0.5pt + luma(100),
+    fill: luma(245),
+    [`x` (i8/i16)], [`y` (i8/i16)]
+  )
+]
+
+#align(center)[
+  *Modo XMB* (Declive e Translação): *3/6 bytes por linha*:
+  #table(
+    columns: (2cm, 2cm, 2cm),
+    inset: 0.5em,
+    stroke: 0.5pt + luma(100),
+    fill: luma(245),
+    [`x` (i8/i16)], [`m` (i8/i16)], [`b` (i8/i16)]
+  )
+]
+
+Para o formato de 8 bits, os dados sofrem um _bit-shift_ à direita antes de serem gravados, reduzindo o consumo de memória para metade.
+
+Nas tabelas `f2l` e `l2f` do formato `LNS8`, a operação binária aplicada aos dados originais de 16-bit antes da escrita é: `byte = (i16_val >> 8) & 0xFF`.
+
+#heading(level: 3, outlined: false, numbering: none)[Geração e Customização de Tabelas (`spline`)]
+
+A ferramenta CLI em `lib/spline/` gera e testa as tabelas binárias `.lns`. O binário suporta dois modos de operação via _flags_ estritas:
+
+```bash
+# Compilação e geração automática dos perfis padrão (Q8.7 e Q4.3)
+cd lib/spline && make
+
+```
+
+#heading(level: 3, outlined: false, numbering: none)[Sintaxe da CLI]
+
+`bash ./build/spline <--gen | --test> [config] `
+
+- `--gen`: Exporta os ficheiros `.lns`.
+  - requer 4 valores: `[+, -, f2l, l2f]` (linhas: $[2, 1024]$).
+- `--test`: Print do erro de aproximação no `stdout`.
+  - requer 1 valor: `[max_linhas]` ($[2, 1024]$).
+
+- `[config]`
+  - `--xf` / `--xmb`: pontos vs. declive ($m, b$).
+  - `--lns16` / `--lns8`: largura do formato.
+  - `<int_digits>`: bits inteiros; intervalo de valores possíveis em `lns8` é $[4,6]$ e em `lns16` é $[4,14]$.
+
+#heading(level: 4, outlined: false, numbering: none)[ Exemplos Práticos]
+
+#v(10pt)
+
+*A. Geração Personalizada (`--gen`)*
+
+Cria tabelas em modo *XMB* para *lns16* ($"Q"8.7$) 
+com tamanhos assimétricos por sub-tabela:
+
+```bash
+# Ordem: + - f2l l2f | int: 8
+./build/spline --gen --xmb 128 256 64 64 --lns16 8
+```
+
+*B. Teste de Precisão (`--test`)*
+
+Avalia o impacto do número de linhas no erro para *lns8* 
+($"Q"4.3$) em modo *XF* (sem gravar ficheiros):
+
+```bash
+# Varrimento até 128 linhas | int: 4
+./build/spline --test --xf 128 --lns8 4
+```
+
+*Nota:* O modo `--test` mapeia o par 
+`Erro vs Linhas` para validação rápida 
+antes da síntese em FPGA.
+
+#v(10pt)
+
+#heading(level: 4, outlined: false, numbering: none)[Exemplo de Utilização das Tabelas]
+
+#v(10pt)
+
+```cpp
+#define SPLINE_XMB
+#include <lnssim.hpp>
+
+using lns8  = lns<8,  4, 3>;
+using lns16 = lns<16, 8, 7>;
+
+lns8_read_tables ("lib/spline/lns_tables/lns8_q4_3_xmb.lns");
+lns16_read_tables("lib/spline/lns_tables/lns16_q8_7_xmb.lns");
+
+lns16 a(1.5f), b(2.0f);
+float result  = (float)(a * b);   // exact — integer add on exponents
+float result2 = (float)(a + b);   // approximated via spline LUT
+float result3 = (float)a.sqrt();  // exact — exp >>= 1
+
+lns_close();
+```

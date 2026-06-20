@@ -81,8 +81,8 @@ NUMERICAL_FMT_ORDER = [
 ]
 
 OP_ORDER  = ["rt", "mul", "div", "add", "sub"]
-OP_LABELS = {"rt": "round-trip", "mul": "mul", "div": "div",
-             "add": "add", "sub": "sub"}
+OP_LABELS = {"rt": "Round-Trip", "mul": "Multiplication", "div": "Division",
+             "add": "Addition", "sub": "Subtraction"}
 OP_PRIMARY = {"rt": "rel", "mul": "rel", "div": "rel",
               "add": "abs", "sub": "abs"}
 
@@ -94,9 +94,9 @@ FS_LABEL    = 20
 FS_TICK     = 14
 FS_TITLE    = 22   # panel title  
 FS_YTICK    = 20   # op labels    
-FS_XTICK    = 18   # band labels  
+FS_XTICK    = 18   # interval labels  
 FS_CELL     = 24   # in-cell fmt  
-FS_LEGEND   = 10   # legend       
+FS_LEGEND   = 24   # legend       
 FS_SUPTITLE = 26
 FS_ANNOT    = 7
 
@@ -132,19 +132,19 @@ def load_samples(path):
 
         for _ in range(n_entries):
             fmt         = f.read(16).rstrip(b"\x00").decode()
-            band        = f.read(32).rstrip(b"\x00").decode()
+            interval    = f.read(32).rstrip(b"\x00").decode()
             op          = f.read(8).rstrip(b"\x00").decode()
 
             data_offset = struct.unpack("<Q", f.read(8))[0]
             count       = struct.unpack("<I", f.read(4))[0]
 
-            entries.append((fmt, band, op, data_offset, count))
+            entries.append((fmt, interval, op, data_offset, count))
 
-        for fmt, band, op, data_offset, count in entries:
+        for fmt, interval, op, data_offset, count in entries:
             f.seek(data_offset)
             raw = f.read(count * 4 * 2)
             arr = np.frombuffer(raw, dtype=np.float32)
-            out[(fmt, band, op)] = {
+            out[(fmt, interval, op)] = {
                 "abs": arr[:count],
                 "rel": arr[count:],
             }
@@ -173,12 +173,12 @@ def save(fig, name):
 # All 4 formats (lns8, bf8, lns16, bf16) shown together in every panel.
 # ---------------------------------------------------------------------------
 
-def norm_band(raw):
+def norm_interval(raw):
     """Strip quotes/whitespace and remove all internal spaces so [1, 2]==[1,2]."""
     return raw.strip().strip('"').replace(" ", "")
 
-def band_sort_key(nb):
-    # Special case: the sub-1 band like "[2^(-p+1),1]" — sort before everything
+def interval_sort_key(nb):
+    # Special case: the sub-1 interval like "[2^(-p+1),1]" — sort before everything
     if "^" in nb and nb.startswith("[2^(-"):
         return -1.0
     # General case: extract the lower bound (first number)
@@ -192,40 +192,40 @@ def band_sort_key(nb):
 def plot_ops_combined(ops_rows):
     """One figure: n_ops rows × 2 cols (rel | abs). All formats overlaid."""
 
-    # Per-format band lists using normalized names; track raw->norm mapping for lookup
-    fmt_bands    = {}   # fmt -> [normalized band, ...]
-    row_norm_map = {}   # (format, raw_band) -> normalized band  (for fast lookup later)
+    # Per-format interval lists using normalized names; track raw->norm mapping for lookup
+    fmt_intervals = {}   # fmt -> [normalized interval, ...]
+    row_norm_map  = {}   # (format, raw_interval) -> normalized interval (for fast lookup later)
 
     for fmt in ALL_FMTS:
         bs, seen = [], set()
 
         for row in ops_rows:
             if row["format"] == fmt:
-                raw = row["band"]
-                nb  = norm_band(raw)
+                raw = row["interval"]
+                nb  = norm_interval(raw)
                 row_norm_map[(fmt, raw)] = nb
 
                 if nb not in seen:
                     seen.add(nb)
                     bs.append(nb)
 
-        fmt_bands[fmt] = bs
+        fmt_intervals[fmt] = bs
 
     # Union, sorted numerically by the lower bound of the range
     seen_union, all_norm = set(), []
     for fmt in ALL_FMTS:
-        for nb in fmt_bands[fmt]:
+        for nb in fmt_intervals[fmt]:
             if nb not in seen_union:
                 seen_union.add(nb)
                 all_norm.append(nb)
  
-    union_bands = sorted(all_norm, key=band_sort_key)
-    band_idx    = {nb: i for i, nb in enumerate(union_bands)}
-    n_union     = len(union_bands)
+    union_intervals = sorted(all_norm, key=interval_sort_key)
+    interval_idx    = {nb: i for i, nb in enumerate(union_intervals)}
+    n_union         = len(union_intervals)
 
     metrics = [
-        ("avg_rel", "avg relative error"),
-        ("avg_abs", "avg absolute error"),
+        ("avg_rel", "Mean Relative Error"),
+        ("avg_abs", "Mean Absolute Error"),
     ]
 
     # Compute global y-limits per metric
@@ -254,10 +254,11 @@ def plot_ops_combined(ops_rows):
         n_rows, n_cols,
         figsize=(max(26, n_union * 1.2), 5 * n_rows),
         sharex="col",
+        sharey=True,
     )
     fig.suptitle(
-        "Arithmetic accuracy — 8-bit & 16-bit formats",
-        fontsize=FS_TITLE + 4,
+        "Arithmetic Accuracy: MRE & MAE for 8-bit & 16-bit formats",
+        fontsize=FS_TITLE * 2,
         y=1.01,
     )
 
@@ -270,16 +271,16 @@ def plot_ops_combined(ops_rows):
             for fmt in ALL_FMTS:
                 xs, ys = [], []
 
-                for nb in fmt_bands[fmt]:
+                for nb in fmt_intervals[fmt]:
                     match = [
                         r for r in ops_rows
                         if r["format"] == fmt
                         and r["op"].strip() == op
-                        and norm_band(r["band"]) == nb
+                        and norm_interval(r["interval"]) == nb
                     ]
 
                     v = safe_float(match[0][metric_col]) if match else None
-                    xs.append(band_idx[nb])
+                    xs.append(interval_idx[nb])
                     ys.append(v if v is not None else float("nan"))
 
                 ax.semilogy(
@@ -296,11 +297,10 @@ def plot_ops_combined(ops_rows):
 
             ax.set_xlim(-0.5, n_union - 0.5)
             ax.set_xticks(range(n_union))
-            ax.set_xticklabels(union_bands, rotation=40, ha="right", fontsize=FS_TICK)
-            ax.set_ylabel(metric_label, fontsize=FS_LABEL)
-            ax.tick_params(axis="y", labelsize=FS_TICK)
+            ax.set_xticklabels(union_intervals, rotation=40, ha="right", fontsize=FS_TICK * 3/2)
+            ax.tick_params(axis="y", labelsize=FS_TICK * 3/2)
 
-            side = "relative error" if col_idx == 0 else "absolute error"
+            side = "Mean Relative Error" if col_idx == 0 else "Mean Absolute Error"
             ax.set_title(
                 f"{OP_LABELS[op]} — {side}",
                 fontsize=FS_TITLE,
@@ -334,31 +334,31 @@ def plot_ops_heatmap_combined(ops_rows, samples):
         ("16-bit  lns16 vs bf16", "lns16", "bf16"),
     ]
     metric_keys = [
-        ("rel", "avg relative error"),
-        ("abs", "avg absolute error"),
+        ("rel", "Mean Relative Error"),
+        ("abs", "Mean Absolute Error"),
     ]
 
     use_wilcoxon = bool(samples)
 
-    # Collect band sets per pair (both pairs should share the same bands)
-    band_sets = {}
+    # Collect interval sets per pair (both pairs should share the same intervals)
+    interval_sets = {}
     for pair_label, lns_fmt, bf_fmt in pairs:
         bs, seen = [], set()
 
         for row in ops_rows:
             if row["format"] in (lns_fmt, bf_fmt):
-                b = row["band"].strip().strip('"')
+                b = row["interval"].strip().strip('"')
 
                 if b not in seen:
                     seen.add(b)
                     bs.append(b)
 
-        band_sets[pair_label] = bs
+        interval_sets[pair_label] = bs
 
     n_ops = len(OP_ORDER)
 
-    n_band_max = max(len(bs) for bs in band_sets.values())
-    fig_w = max(28, n_band_max * 1.6 * 2 + 4)
+    n_interval_max = max(len(bs) for bs in interval_sets.values())
+    fig_w = max(28, n_interval_max * 1.6 * 2 + 4)
     fig_h = n_ops * 1.8 * 2 + 4
 
     fig, axes = plt.subplots(
@@ -366,29 +366,29 @@ def plot_ops_heatmap_combined(ops_rows, samples):
         figsize=(fig_w, fig_h),
     )
     fig.suptitle(
-        "Heatmap — winner per op × band  (relative error | absolute error)",
-        fontsize=FS_SUPTITLE,
+        "Heatmap — Winner per Operation × Interval (MRE | MAE)",
+        fontsize=FS_TITLE * 2,
         y=1.01,
     )
 
     for row_idx, (pair_label, lns_fmt, bf_fmt) in enumerate(pairs):
-        band_set = band_sets[pair_label]
-        n_band   = len(band_set)
+        interval_set = interval_sets[pair_label]
+        n_interval   = len(interval_set)
 
         for col_idx, (metric_key, metric_label) in enumerate(metric_keys):
             metric_col = f"avg_{metric_key}"
             ax = axes[row_idx][col_idx]
 
-            data = np.full((n_ops, n_band), 0.5)
+            data = np.full((n_ops, n_interval), 0.5)
 
             for ri, op in enumerate(OP_ORDER):
-                for ci, band in enumerate(band_set):
-                    def get_agg(fmt, _mc=metric_col, _op=op, _band=band):
+                for ci, interval in enumerate(interval_set):
+                    def get_agg(fmt, _mc=metric_col, _op=op, _interval=interval):
                         match = [
                             r for r in ops_rows
                             if  r["format"]                  == fmt
                             and r["op"].strip()              == _op
-                            and r["band"].strip().strip('"') == _band
+                            and r["interval"].strip().strip('"') == _interval
                         ]
                         return safe_float(match[0][_mc]) if match else None
 
@@ -398,8 +398,8 @@ def plot_ops_heatmap_combined(ops_rows, samples):
                         continue
 
                     if use_wilcoxon:
-                        sl = samples.get((lns_fmt, band, op), {}).get(metric_key)
-                        sb = samples.get((bf_fmt,  band, op), {}).get(metric_key)
+                        sl = samples.get((lns_fmt, interval, op), {}).get(metric_key)
+                        sb = samples.get((bf_fmt,  interval, op), {}).get(metric_key)
 
                         if sl is not None and sb is not None and len(sl) and len(sb):
                             n1, n2 = len(sl), len(sb)
@@ -419,8 +419,8 @@ def plot_ops_heatmap_combined(ops_rows, samples):
             ])
             ax.imshow(data, cmap=cmap, vmin=0.0, vmax=1.0, aspect="auto")
 
-            ax.set_xticks(range(n_band))
-            ax.set_xticklabels(band_set, rotation=45, ha="right", fontsize=FS_XTICK)
+            ax.set_xticks(range(n_interval))
+            ax.set_xticklabels(interval_set, rotation=45, ha="right", fontsize=FS_XTICK * 5/4)
             ax.set_yticks(range(n_ops))
             ax.set_yticklabels([OP_LABELS[o] for o in OP_ORDER], fontsize=FS_YTICK)
 
@@ -432,7 +432,7 @@ def plot_ops_heatmap_combined(ops_rows, samples):
             )
 
             for ri in range(n_ops):
-                for ci in range(n_band):
+                for ci in range(n_interval):
                     v = data[ri, ci]
                     is_tie     = (v == 0.5)
                     cell_label = lns_fmt if v < 0.5 else (bf_fmt if v > 0.5 else "tie")
@@ -579,20 +579,21 @@ def plot_numerical(num_rows, error_col, ylabel, title_suffix, filename):
                         color="black", fontweight="bold")
 
     ax.set_yscale("log")
+    ax.margins(y=0.55)
     ax.set_xticks(x)
-    ax.set_xticklabels(test_names, rotation=35, ha="right", fontsize=FS_TICK)
+    ax.set_xticklabels(test_names, rotation=35, ha="right", fontsize=FS_TICK * 3/2)
     ax.set_ylabel(ylabel, fontsize=FS_LABEL)
-    ax.tick_params(axis="y", labelsize=FS_TICK)
+    ax.tick_params(axis="y", labelsize=FS_TICK * 3/2)
     ax.set_title(
-        f"Numerical tests — {title_suffix}\n"
-        f"(~tie = rel. diff < {NUM_TIE:.0%}; ×N on top of bar = acc-variant improvement (base variant / acc variant))",
-        fontsize=FS_TITLE,
+        f"Kernel Tests — {title_suffix}\n"
+        f"(~tie = MRE diff. < {NUM_TIE:.0%}; ×N on top of bar = acc-variant improvement (base variant / acc variant))",
+        fontsize=FS_TITLE * 5/4,
         pad=10,
     )
-    ax.legend(fontsize=FS_LEGEND)
+    ax.legend(fontsize=FS_LEGEND/2)
     ax.grid(True, axis="y", which="major", alpha=0.3)
     ax.yaxis.set_major_formatter(ticker.LogFormatterMathtext())
-    fig.tight_layout(pad=2.0)
+    fig.tight_layout(pad=3.0)
     save(fig, filename)
 
 
@@ -624,15 +625,15 @@ def main():
     plot_numerical(
         num_rows,
         "rel_err",
-        "relative error  (lower = better)",
-        "relative error by format",
+        "Mean Relative Error (lower = better)",
+        "MRE by Format",
         "numerical_rel.png"
     )
     plot_numerical(
         num_rows,
         "abs_err",
-        "absolute error  (lower = better)",
-        "absolute error by format",
+        "Mean Absolute Error (lower = better)",
+        "MAE by Format",
         "numerical_abs.png"
     )
 

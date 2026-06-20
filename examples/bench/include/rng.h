@@ -25,7 +25,7 @@ static inline f32 rng_f32(void) {
 }
 
 // ---------------------------------------------------------------------------
-// sample_band — log-uniform sample with |result| in [lo, hi].
+// sample_interval — log-uniform sample with |result| in [lo, hi].
 //
 // Strategy: pick an integer exponent uniformly in [ceil(log2(lo)), floor(log2(hi))],
 // attach a full random 23-bit significand, randomise the sign.
@@ -36,7 +36,7 @@ static inline f32 rng_f32(void) {
 // ill-defined.
 // ---------------------------------------------------------------------------
 
-static inline f32 sample_band(f32 lo, f32 hi, f32 fmt_min) {
+static inline f32 sample_interval(f32 lo, f32 hi, f32 fmt_min) {
   f32 lo_safe = lo < fmt_min ? fmt_min : lo;
 
   i32 exp_lo = (i32)ceilf (log2f(lo_safe));
@@ -70,9 +70,9 @@ static inline f32 sample_band(f32 lo, f32 hi, f32 fmt_min) {
 #define BF8_MIN    (1.0f / 64.0f)
 #define BF16_MIN   (0.0625f)
 
-#define SB8(lo,hi)    sample_band((lo), (hi), LNS8_MIN)
-#define SB16(lo,hi)   sample_band((lo), (hi), LNS16_MIN)
-#define SBBF8(lo,hi)  sample_band((lo), (hi), BF8_MIN)
-#define SBBF16(lo,hi) sample_band((lo), (hi), BF16_MIN)
+#define SB8(lo,hi)    sample_interval((lo), (hi), LNS8_MIN)
+#define SB16(lo,hi)   sample_interval((lo), (hi), LNS16_MIN)
+#define SBBF8(lo,hi)  sample_interval((lo), (hi), BF8_MIN)
+#define SBBF16(lo,hi) sample_interval((lo), (hi), BF16_MIN)
 
 #endif // !__RNG_H__

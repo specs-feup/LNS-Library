@@ -73,7 +73,7 @@ static f32 g_norm_samples[NORM_N];
 
 static void norm_init_samples(void) {
   for (i32 i = 0; i < NORM_N; i++)
-    g_norm_samples[i] = sample_band(0.01f, 100.0f, 0.01f) / NORM_DIV;
+    g_norm_samples[i] = sample_interval(0.01f, 100.0f, 0.01f) / NORM_DIV;
 }
 
 static scalar_result norm_lns8(void) {
@@ -1263,7 +1263,7 @@ static f32 g_rmsnorm_samples[RMSNORM_N];
 
 static void rmsnorm_init_samples(void) {
   for (i32 i = 0; i < RMSNORM_N; i++)
-    g_rmsnorm_samples[i] = sample_band(0.01f, 4.0f, 0.01f);
+    g_rmsnorm_samples[i] = sample_interval(0.01f, 4.0f, 0.01f);
 }
 
 static scalar_result rmsnorm_lns8(void) {

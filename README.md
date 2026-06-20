@@ -175,8 +175,8 @@ make uninstall      # removes installed headers from system include path
 
 Monte Carlo arithmetic accuracy benchmark comparing lns8 vs bf8 (E4M3) and 
 lns16 vs bf16 across five operations (round-trip, mul, div, add, sub), 
-broken down by operand magnitude band, with Mann-Whitney significance testing 
-on 100 000 samples per cell. Errors are measured against lns32 as the 
+broken down by operand magnitude interval, with Mann-Whitney significance 
+testing on 100 000 samples per cell. Errors are measured against lns32 as the 
 reference rather than float32, so that conversion errors are accounted for 
 consistently across all formats. See the 
 [bench README](examples/bench/README.md) for full methodology 
@@ -187,35 +187,37 @@ and execution details.
 | Operation | 8-bit winner | 16-bit winner | Reason |
 | --- | --- | --- | --- |
 | mul | bf8 | bf16 | bf's denser mantissa grid dominates on relative error |
-| div | bf8 | **lns16** | bf8 wins by a small margin; Exact integer subtract on the exponent field across all bands in 16 bit |
+| div | bf8 | **lns16** | bf8 wins by a small margin at 8-bit; exact integer subtract on the exponent field gives lns16 the edge at 16-bit across all intervals |
 | add | bf8 | bf16 | IEEE 754 correctly-rounded add; LNS add requires a nonlinear spline correction anchored to input scale |
 | sub | bf8 | bf16 | Same as add |
-| round-trip | bf8 | tie | bf8 slightly better across all bands; lns16 and bf16 statistically indistinguishable |
+| round-trip | bf8 | tie | bf8 slightly better across all intervals; lns16 and bf16 statistically indistinguishable |
 
-The div advantage for LNS holds across all magnitude bands and both bit-widths 
-with no exceptions. The mul result diverges between bit-widths: lns8 wins on 
-both absolute and relative error, while bf16 wins on relative error at 16 bits 
-but lns16 recovers the advantage on absolute error — reflecting bf16's 
-asymmetric precision distribution favouring values near zero.
+At 8-bit, bf8 wins across all operations and all intervals with no exceptions,
+reflecting lns8's coarser grid and the spline approximation cost at that
+bit-width. The 16-bit results are more nuanced: the div advantage for lns16
+holds across all intervals under both relative and absolute error, while the
+mul result diverges between metrics — bf16 wins on relative error but lns16
+recovers the advantage on absolute error, reflecting bf16's asymmetric
+precision distribution favouring values near zero.
 
 ![winner heatmap by bit size — relative and absolute error](examples/bench/results/ops_heatmap_combined_rel_abs.png)
 
-#### Numerical tests (lns16 vs bf16)
+#### Kernel tests (lns16 vs bf16)
 
-![numerical results](examples/bench/results/numerical_rel.png)
-![numerical results](examples/bench/results/numerical_abs.png)
+![kernel results — relative error](examples/bench/results/numerical_rel.png)
+![kernel results — absolute error](examples/bench/results/numerical_abs.png)
 
-In numerical tests comparing 16-bit Logarithmic Number Systems (LNS) and 
-bfloat16 (bf16), bf16 consistently outperforms baseline lns16 in addition and 
-accumulation-heavy workloads (such as forward/backward series summation, 
-sigmoid, gelu, and softmax) due to its superior correctly-rounded addition 
-accuracy. However, this gap is primarily driven by accumulation precision 
-rather than the base format itself; when lns16 is paired with 32-bit 
-accumulators (lns16_lns32acc or lns16_f32acc), it recovers most of its 
-precision deficit, matching or even slightly exceeding bf16 performance 
-in specific structures like rmsnorm. Conversely, both formats perform 
-equally well (~tie) in pure-multiplication chains where LNS has no structural 
-disadvantage, or fail equally when catastrophic cancellation inherently destroys precision.
+In kernel tests comparing lns16 and bf16, bf16 consistently outperforms 
+baseline lns16 in addition and accumulation-heavy workloads (such as 
+forward/backward series summation, sigmoid, gelu, and softmax) due to its 
+superior correctly-rounded addition accuracy. However, this gap is primarily 
+driven by accumulator precision rather than the base format itself; when lns16 
+is paired with 32-bit accumulators (lns16_lns32acc or lns16_f32acc), it 
+recovers most of its precision deficit, matching or even slightly exceeding 
+bf16 performance in specific kernels like rmsnorm. Both formats tie on 
+pure-multiply chains where LNS has no structural disadvantage, or fail equally 
+when catastrophic cancellation inherently destroys precision. The 8-bit formats 
+saturate on all kernels except geometric_progression.
 
 ### `examples/tinystories/` — TinyStories inference in lns16 and bf16
 

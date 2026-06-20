@@ -11,8 +11,8 @@
 //
 // Two record kinds share one file, distinguished by the "test_kind" column:
 //
-//   "ops"      — per-band arithmetic accuracy (bench_ops)
-//                columns: format, band, op, avg_rel, max_rel, avg_abs, max_abs
+//   "ops"      — per-interval arithmetic accuracy (bench_ops)
+//                columns: format, interval, op, avg_rel, max_rel, avg_abs, max_abs
 //
 //   "numerical"— single-scalar numerical tests (bench_numerical)
 //                columns: format, test, variant, got, expected, abs_err, rel_err
@@ -26,11 +26,11 @@ void csv_open (const char* results_dir);
 void csv_close(void);
 
 // Append one row for an arithmetic op benchmark.
-// band_label : e.g. "[1, 2]"
+// interval_label : e.g. "[1, 2]"
 // op_name    : "rt" | "mul" | "div" | "add" | "sub"
 void csv_write_ops(
   const char*     fmt_name,
-  const char*     band_label,
+  const char*     interval_label,
   const char*     op_name,
   const op_stats* s
 );
@@ -53,7 +53,7 @@ void csv_write_scalar(
 // File layout
 // -----------
 //   [ data region ]
-//     For each (fmt, band, op) group, written sequentially:
+//     For each (fmt, interval, op) group, written sequentially:
 //       N × f32   abs_samples
 //       N × f32   rel_samples
 //
@@ -61,7 +61,7 @@ void csv_write_scalar(
 //     u32  n_entries
 //     For each entry:
 //       char fmt[16]
-//       char band[32]
+//       char interval[32]
 //       char op[8]
 //       u64  data_offset   — byte offset of abs_samples in file
 //       u32  count         — N

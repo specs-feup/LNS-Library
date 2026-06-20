@@ -5,9 +5,9 @@
 #include "stats.h"
 
 // ---------------------------------------------------------------------------
-// bench_ops — LNS vs BF arithmetic accuracy across magnitude bands.
+// bench_ops — LNS vs BF arithmetic accuracy across magnitude intervals.
 //
-// Tests five operations (round-trip, mul, div, add, sub) at each band,
+// Tests five operations (round-trip, mul, div, add, sub) at each interval,
 // comparing lns8 vs bf8 and lns16 vs bf16.
 //
 // Exhaustive tables for lns8 and lns16 are read from .lns files once at
@@ -38,17 +38,17 @@
 // ---------------------------------------------------------------------------
 
 typedef struct {
-  f32        lo;
-  f32        hi;
+  f32 
+    lo, hi;
   const char* label;
-} band_t;
+} interval_t;
 
-// Exported band tables so bench_numerical and main can iterate them
+// Exported interval tables so bench_numerical and main can iterate them
 // if needed for range context.
-extern const band_t BANDS8[];
-extern const band_t BANDS16[];
-extern const u32    N_BANDS8;
-extern const u32    N_BANDS16;
+extern const interval_t BANDS8[];
+extern const interval_t BANDS16[];
+extern const u32        N_BANDS8;
+extern const u32        N_BANDS16;
 
 // Run the full ops benchmark for both format pairs.
 // results_dir is passed so this module can call csv_write_ops directly.

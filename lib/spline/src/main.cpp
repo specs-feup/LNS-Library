@@ -7,7 +7,7 @@ void print_help() {
   std::cout << "    --gen  <--xf | --xmb> <s_table+ (rows): [2,1024]> <s_table- (rows): [2,1024]>" << std::endl
             << "      <s_table float2lns (rows): [2,1024]> <s_table lns2float (rows): [2,1024]>"   << std::endl
             << "      <--lns16 | --lns8> <int digits: lns8 - [4,6], lns16 - [4,14]>"               << std::endl;
-  std::cout << "    --test <--xf | --xmb> <max s_table (rows): [8,1024]>"
+  std::cout << "    --test <--xf | --xmb> <max s_table (rows): [2,1024]>"
                "      <--lns16 | --lns8> <int digits: lns8 - [4,6], lns16 - [4,14]>"               << std::endl;
 }
 
@@ -134,7 +134,7 @@ i32 main(i32 argc, char* argv[]) {
   }
 
   const size_t s_max = strtol(argv[3], NULL, 10);
-  if (s_max < 8 || s_max > 1024) {
+  if (s_max < 2 || s_max > 1024) {
     std::cerr << "[ERROR]: table size must be between 8 and 1024" << std::endl;
     exit(1);
   }

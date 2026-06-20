@@ -769,7 +769,7 @@ bf16 random_bf16(u64 *state) { // random bf1632 in [0,1)
 i32 sample(Sampler* sampler, bf16* logits) {
   // sample the token given the logits and some hyperparameters
   i32 next;
-  if (sampler->temperature == 0.0f) {
+  if (sampler->temperature == bf16(0.0f)) {
     // greedy argmax sampling: take the token with the highest probability
     next = sample_argmax(logits, sampler->vocab_size);
   } else {

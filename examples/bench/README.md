@@ -36,24 +36,24 @@ This pairing ensures that conversion error is accounted for consistently within 
 
 ---
 
-## Benchmark 1 — per-band arithmetic accuracy (`bench_ops`)
+## Benchmark 1 — per-interval arithmetic accuracy (`bench_ops`)
 
 ### Operations tested
 
 `round-trip`, `mul`, `div`, `add`, `sub`
 
-### Bands
+### Intervals
 
 **8-bit** (lns8, bf8): operand magnitudes capped at \|x\| = 4 because
 `lns8`'s 4-bit signed integer exponent field wraps at exponent = 4,
 making mul/add results structurally saturated above that range.
-The three bands are `[2^(-p+1), 1]`, `[1, 2]`, `[2, 4]`.
+The three intervals are `[2^(-p+1), 1]`, `[1, 2]`, `[2, 4]`.
 
-**16-bit** (lns16, bf16): eight bands from `[2^(-p+1), 1]` to `[64, 2^16]`.
+**16-bit** (lns16, bf16): eight intervals from `[2^(-p+1), 1]` to `[64, 2^16]`.
 
 ### Sampling
 
-Operands are drawn **log-uniformly** within each band: the integer
+Operands are drawn **log-uniformly** within each interval: the integer
 exponent is chosen uniformly over the powers of 2 inside `[lo, hi]`,
 a full random 23-bit significand is attached, and the sign is
 independently randomised.  This avoids pile-up at power-of-2 boundaries
@@ -124,7 +124,7 @@ most complete picture.
 
 ---
 
-## Results — per-band arithmetic accuracy
+## Results — per-interval arithmetic accuracy
 
 ### Winner heatmaps
 
@@ -133,15 +133,14 @@ most complete picture.
 #### 8-bit: lns8 vs bf8
 
 The 8-bit picture is identical under both relative and absolute error:
-bf8 wins across all three bands. There are no ties.
+bf8 wins across all three intervals. There are no ties.
 
 The mul result is notable: LNS multiplication is an exact integer
 addition on the fixed-point exponent field, so its relative error comes
-only from the initial quantisation of the operands. However, even
-with bf8 mulrounding a full mantissa product, 
-which with only 3 mantissa bits incurs a
-larger per-operation error. Division follows the same logic,
-although the difference is way smaller.
+only from the initial quantisation of the operands. However, even with
+bf8 rounding a full mantissa product, which with only 3 mantissa bits
+incurs a larger per-operation error, bf8 still wins. Division follows
+the same logic, although the difference is considerably smaller.
 
 Round-trip loss for lns8 relative to bf8 reflects the coarser spacing
 of the LNS grid near 1.0 at 8-bit widths; bf8's uniform-ULP spacing in
@@ -157,19 +156,19 @@ suffer.
 The 16-bit results are more nuanced and the two metrics tell different
 stories for mul.
 
-Under **absolute error**: lns16 wins mul in 7 of 8 bands (tie at
-[64, 2^16]), wins div in all 8 bands, round-trip is all ties, and bf16
-wins add and sub in all 8 bands.
+Under **absolute error**: lns16 wins mul in 7 of 8 intervals (tie at
+[64, 2^16]), wins div in all 8 intervals, round-trip is all ties, and bf16
+wins add and sub in all 8 intervals.
 
-Under **relative error**: bf16 wins mul in all 8 bands, lns16 still wins
-div in all 8 bands, round-trip remains all ties, and bf16 wins add and
-sub in all 8 bands.
+Under **relative error**: bf16 wins mul in all 8 intervals, lns16 still wins
+div in all 8 intervals, round-trip remains all ties, and bf16 wins add and
+sub in all 8 intervals.
 
 The mul flip between absolute and relative is meaningful.  In absolute
 terms lns16's exact-exponent multiplication keeps errors small for
 moderate magnitudes, but its relative error is larger than bf16's because
 bf16 mul is correctly rounded to 7 mantissa bits uniformly across the
-number line.  At large magnitudes (the [64, 2^16] band) even the absolute
+number line.  At large magnitudes (the [64, 2^16] interval) even the absolute
 advantage disappears.  This suggests lns16 mul is preferable in
 applications where operands stay in a bounded range and absolute fidelity
 matters, but bf16 mul is preferable when relative accuracy must be
@@ -179,11 +178,11 @@ The round-trip tie at 16-bit (versus bf8 winning at 8-bit) reflects the
 increased fractional bit count in lns16 giving its grid spacing
 comparable density to bf16 in each binade.
 
-### Error by band
+### Error by interval
 
-![avg relative and absolute error by band](results/ops_errors.png)
+![avg relative and absolute error by interval](results/ops_errors.png)
 
-**avg_rel**: relative error is approximately band-invariant for all
+**avg_rel**: relative error is approximately interval-invariant for all
 formats and ops, as expected from scale-free formats.  The LNS/BF gap
 is essentially constant across magnitude decades.
 
@@ -195,16 +194,16 @@ exponents grow.
 
 ---
 
-## Benchmark 2 — numerical tests (`bench_numerical`)
+## Benchmark 2 — kernel tests (`bench_numerical`)
 
-Eight algorithm-level tests compare lns16 and bf16 on realistic numerical
-workloads.  LNS formats are evaluated against lns32 (a higher-precision
-log-space accumulator); BF formats are evaluated against f64.  Winners
-are declared when the relative difference between errors exceeds 5%;
-smaller differences are annotated as ~tie.  The 8-bit formats are
-included for geometric_progression only; they saturate on every other test.
+Eight algorithm-level kernel tests compare lns16 and bf16 on realistic
+numerical workloads. LNS formats are evaluated against lns32 (a
+higher-precision log-space accumulator); BF formats are evaluated against
+f64. Winners are declared when the relative difference between errors
+exceeds 5%; smaller differences are annotated as ~tie. The 8-bit formats
+saturate on all kernels except geometric_progression.
 
-Each lns16 test is run in three accumulator configurations to separate
+Each lns16 kernel is run in three accumulator configurations to separate
 the effect of accumulator precision from that of the weight/activation
 format:
 
@@ -212,14 +211,15 @@ format:
 - **`lns16_lns32acc`** — lns16 weights and activations, lns32 accumulators
 - **`lns16_f32acc`** — lns16 weights and activations, fp32 accumulators
 
-The bf16 tests likewise include a **`bf16_f32acc`** variant (fp32 accumulators).
+The bf16 kernels likewise include a **`bf16_f32acc`** variant (fp32 accumulators).
 
-### Tests
+### Kernels
 
 **1. Geometric progression** — `a_n = a_0 · r^n`, a_0 = 1, r = 1.015, n = 100.
 Each step is a single multiply; LNS mul is exact in log-space, BF mul
 rounds every step.  The raw result pow(1.015, 100) ≈ 4.4 is safely
-inside all formats' representable range.
+inside all formats' representable range. The 8-bit pair is included here
+as the only kernel where lns8 and bf8 do not saturate.
 
 **2. Euclidean norm** — `||x||` over 4096 values log-uniform in [0.01, 100],
 normalised by dividing each input by 256 before squaring so the expected
@@ -252,20 +252,20 @@ Exercises squaring (exact in LNS), accumulation, and square root (exact in LNS).
 
 ---
 
-## Results — numerical tests
+## Results — kernel tests
 
-![numerical absolute error](results/numerical_abs.png)
+![kernel absolute error](results/numerical_abs.png)
 
-![numerical relative error](results/numerical_rel.png)
+![kernel relative error](results/numerical_rel.png)
 
-Both plots show all eight test groups; bars are grouped so that the lns16 base 
+Both plots show all eight kernels; bars are grouped so that the lns16 base 
 variant and the lns16_lns32acc / lns16_f32acc accumulator variants appear 
 adjacently, and similarly for bf16 and bf16_f32acc.  This makes the accumulator 
 contribution directly visible.  Winners are assessed on relative error; the 
 absolute chart is provided for completeness and to show the 8-bit picture.
 
-| Test | Winner (lns16 vs bf16) | Notes |
-|------|------------------------|-------|
+| Kernel | Winner (lns16 vs bf16) | Notes |
+|--------|------------------------|-------|
 | geometric_progression | ~tie | 100-step pure-multiply chain; both accumulator variants also ~tie. The 8-bit pair is likewise ~tie. |
 | euclidean_norm | ~tie | Both 16-bit formats land within 5% of each other. lns16_lns32acc recovers some of the gap from lns16 baseline. |
 | alternating_harmonic | ~tie | Both formats fail catastrophically (rel_err ≈ 1.0) — severe cancellation destroys precision regardless of format or accumulator. |
@@ -274,14 +274,14 @@ absolute chart is provided for completeness and to show the 8-bit picture.
 | sigmoid | bf16 | bf16 wins clearly; LNS's native exp does not overcome the add/div error chain. Accumulator variants provide modest improvement. |
 | gelu | bf16 | bf16 wins clearly; the compound mul/add/tanh chain amplifies LNS's per-op add overhead. |
 | softmax_sum | bf16 | Accumulation-heavy after the exp; bf16's correctly-rounded add dominates. lns16_f32acc and lns16_lns32acc reduce the gap. |
-| rmsnorm_denom | ~tie / lns16 | LNS squaring and square root are both exact; only the sum accumulation differs. lns16_lns32acc and lns16_f32acc bring lns16 to parity or better on this test. |
+| rmsnorm_denom | ~tie / lns16 | LNS squaring and square root are both exact; only the sum accumulation differs. lns16_lns32acc and lns16_f32acc bring lns16 to parity or better on this kernel. |
 
-The numerical results are consistent with the per-band picture: in any
+The kernel results are consistent with the per-interval picture: in any
 workload dominated by addition or accumulation, bf16's correctly-rounded
 add gives it a durable advantage.  The accumulator variants show that
 this gap is largely attributable to the accumulator precision rather than
 to the weight/activation format: lns16_lns32acc and lns16_f32acc recover
-much of the deficit on accumulation-heavy tests (pi2_over6, softmax_sum,
+much of the deficit on accumulation-heavy kernels (pi2_over6, softmax_sum,
 rmsnorm_denom), leaving the remaining difference to the weight-format
 contribution.  On pure-multiply chains (geometric_progression) all
 variants tie.
@@ -294,21 +294,21 @@ variants tie.
 |------|----------|
 | `results/results.csv` | All benchmark data, machine-readable |
 | `results/samples.bin` | Per-sample error distributions for Mann-Whitney testing |
-| `results/ops_avg_rel.png` | avg_rel by band for each op and format pair |
-| `results/ops_avg_abs.png` | avg_abs by band for each op and format pair |
-| `results/ops_heatmap_lns8_bf8_rel.png` | Winner grid: op × band, 8-bit, relative error |
-| `results/ops_heatmap_lns8_bf8_abs.png` | Winner grid: op × band, 8-bit, absolute error |
-| `results/ops_heatmap_lns16_bf16_rel.png` | Winner grid: op × band, 16-bit, relative error |
-| `results/ops_heatmap_lns16_bf16_abs.png` | Winner grid: op × band, 16-bit, absolute error |
-| `results/numerical_rel.png` | Bar chart of rel_err for all numerical tests |
-| `results/numerical_abs.png` | Bar chart of abs_err for all numerical tests |
+| `results/ops_avg_rel.png` | avg_rel by interval for each op and format pair |
+| `results/ops_avg_abs.png` | avg_abs by interval for each op and format pair |
+| `results/ops_heatmap_lns8_bf8_rel.png` | Winner grid: op × interval, 8-bit, relative error |
+| `results/ops_heatmap_lns8_bf8_abs.png` | Winner grid: op × interval, 8-bit, absolute error |
+| `results/ops_heatmap_lns16_bf16_rel.png` | Winner grid: op × interval, 16-bit, relative error |
+| `results/ops_heatmap_lns16_bf16_abs.png` | Winner grid: op × interval, 16-bit, absolute error |
+| `results/numerical_rel.png` | Bar chart of rel_err for all kernel tests |
+| `results/numerical_abs.png` | Bar chart of abs_err for all kernel tests |
 
 ### CSV schema
 
 Rows have a `test_kind` column: `ops` or `numerical`.
 
 **ops rows:**
-`test_kind, format, band, op, avg_rel, max_rel, avg_abs, max_abs`
+`test_kind, format, interval, op, avg_rel, max_rel, avg_abs, max_abs`
 
 **numerical rows:**
 `test_kind, format, test_name, variant, got, expected, abs_err, rel_err`
@@ -317,7 +317,7 @@ Rows have a `test_kind` column: `ops` or `numerical`.
 
 ```
 [ data region ]
-  For each (fmt, band, op) group, written sequentially:
+  For each (fmt, interval, op) group, written sequentially:
     N × f32   abs_samples
     N × f32   rel_samples
 
@@ -325,7 +325,7 @@ Rows have a `test_kind` column: `ops` or `numerical`.
   u32  n_entries
   For each entry (68 bytes, packed, no padding):
     char fmt[16]
-    char band[32]
+    char interval[32]
     char op[8]
     u64  data_offset
     u32  count
@@ -353,14 +353,14 @@ python3 plot.py results
 
 - The xorshift32 RNG is seeded to `0xdeadbeef` and is deterministic.
   Results are fully reproducible across runs with the same `n_samples`.
-- `n_samples = 100 000` per op per band gives relative standard error
+- `n_samples = 100 000` per op per interval gives relative standard error
   of ~1/√n ≈ 0.3% on the mean, well below the typical format differences
   observed.
 - All averages are arithmetic means of error samples.
 - For add/sub, the cancellation filter is applied before sampling the
-  required `n_samples` valid pairs, so each band's stats always rest on
+  required `n_samples` valid pairs, so each interval's stats always rest on
   exactly `n_samples` valid measurements.
 - Heatmap winner cells require Mann-Whitney U p < 0.01 (two-sided) and
   rank-biserial |r| ≥ 0.05 on the full per-sample distributions.
-  Numerical test ties are declared when the relative difference between
+  Kernel test ties are declared when the relative difference between
   lns and bf errors is < 5%.
