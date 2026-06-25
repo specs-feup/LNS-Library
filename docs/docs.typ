@@ -102,13 +102,6 @@ We would like to thank our supervisor Nuno Paulino and co-supervisors Luís Sous
 #pagebreak()
 
 #outline(
-  title: "List of Figures",
-  target: figure.where(kind: image),
-)
-
-#pagebreak()
-
-#outline(
   title: "List of Tables",
   target: figure.where(kind: table),
 )
@@ -632,7 +625,7 @@ $
 
 #pagebreak()
 
-Following D'Alambert Criteria for $f^-$, as $lim_(n->infinity) a_(n+1)/a_n = L, a_n = 2^(n x)/n^(k+1)$:
+Following D'Alambert Criteria for $f^-$, as $lim_(n->infinity) a_(n+1)/a_n = L, a_n = n^(k-1) 2^(n x)$:
 
 
 #math.equation(numbering: none, block: true)[

@@ -101,19 +101,19 @@ Or manually:
 
 ```bash
 # lns16 XF — 15M model
-./build/tiny/tiny_xf models/lns/stories15M_lns16_xf.bin models/tokenizer.bin
+./build/tiny/tiny_xf models/lns/stories15M_lns16_xf.bin -z models/tokenizer.bin
 
 # lns16 XF with lns32 accumulators — 15M model
-./build/tiny/tiny_xf_lns32acc models/lns/stories15M_lns16_xf.bin models/tokenizer.bin
+./build/tiny/tiny_xf_lns32acc models/lns/stories15M_lns16_xf.bin -z models/tokenizer.bin
 
 # lns16 XMB — 15M model
-./build/tiny/tiny_xmb models/lns/stories15M_lns16_xf.bin models/tokenizer.bin
+./build/tiny/tiny_xmb models/lns/stories15M_lns16_xf.bin -z models/tokenizer.bin
 
 # lns16 XMB with lns32 accumulators — 15M model
-./build/tiny/tiny_xmb_lns32acc models/lns/stories15M_lns16_xf.bin models/tokenizer.bin
+./build/tiny/tiny_xmb_lns32acc models/lns/stories15M_lns16_xf.bin -z models/tokenizer.bin
 
 # bf16 — 15M model
-./build/tiny/tiny_bf16 models/stories15M.bin models/tokenizer.bin
+./build/tiny/tiny_bf16 models/stories15M.bin -z models/tokenizer.bin
 ```
 
 Spline tables are loaded automatically from the default path 

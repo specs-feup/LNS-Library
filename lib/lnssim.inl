@@ -140,7 +140,7 @@ lns<n, i, f>::lns(const lns<n2, i2, f2>& other) {
   if (dst_exp == LNS_ZERO(n))
     dst_exp++; // avoid zero sentinel
 
-  bits = (other.sign() << (n - 1)) ^ dst_exp;
+  bits = LNS_SIGN(n, other.sign()) ^ dst_exp;
 
   /*
   if constexpr (n == 8 && n2 == 32) {
@@ -193,8 +193,8 @@ lns<n,i,f> lns<n,i,f>::operator+(const lns other) const {
     return lns(LNS_ZERO(n), false);
 
   result  = exp1 + lns_add_and_sub_compute(use_add, diff);
-  result &= (uint_t<n>)(1u << (n - 1)) - 1;
-  result |= sign1 << (n - 1);
+  result &= LNS_EXPONENT_BITMASK(n);
+  result |= LNS_SIGN(n, sign1);
 
   return lns((uint_t<n>)result, false);
 }

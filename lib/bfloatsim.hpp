@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "utils.h"
+#include <lnsutils>
 
 struct bf8;
 struct bf16;
@@ -76,6 +76,6 @@ struct bf16 {
   void debug_print        (const char* label = "") const; 
 };
 
-#include "bfloatsim.inl"
+#include <bfloatsim.inl>
 
 #endif // !__BFLOAT_SIM_H__

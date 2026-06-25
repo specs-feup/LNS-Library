@@ -7,7 +7,7 @@
 #include <cfloat>
 #include <cstring>
 
-#include <lnsluts.hpp>
+#include <lnsluts>
 
 template<u8 n, u8 i, u8 f>
 struct lns {
@@ -64,6 +64,6 @@ private:
   int_t<n> lns_add_and_sub_compute (bool use_add, const int_t<n> diff) const;
 };
 
-#include "lnssim.inl"
+#include <lnssim.inl>
 
 #endif // !__LNS_SIM_H__

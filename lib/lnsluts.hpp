@@ -1,7 +1,7 @@
 #ifndef __LNS_LUTS_H__
 #define __LNS_LUTS_H__
 
-#include <utils.h>
+#include <lnsutils>
 
 template<u8 N> struct uint_tt;
 template<> struct uint_tt<8>  { using type = u8;  };

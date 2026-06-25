@@ -1,5 +1,5 @@
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __LNS_UTILS_H__
+#define __LNS_UTILS_H__
 
 #include <cstdint>
 #include <cassert>
@@ -17,4 +17,4 @@ typedef int64_t  i64;
 typedef float    f32;
 typedef double   f64;
 
-#endif // !__UTILS_H__
+#endif // !__LNS_UTILS_H__
