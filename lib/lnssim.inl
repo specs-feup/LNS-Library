@@ -340,8 +340,8 @@ bool lns<n,i,f>::operator>(const lns other) const {
     exp1 = exponent(),
     exp2 = other.exponent();
   return (
-    sign1 && sign2 && exp1 < exp2) ||
-    (!sign1 && (sign2 || exp1 > exp2)
+    (sign1 && sign2 && exp1 < exp2) ||
+    (!sign1 && (sign2 || exp1 > exp2))
   );
 }
 

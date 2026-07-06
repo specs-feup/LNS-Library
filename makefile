@@ -14,6 +14,7 @@ LIB_DIR = lib
 
 HDR_LNS        		= $(LIB_DIR)/lns.hpp
 HDR_LNS_INL       = $(LIB_DIR)/lns.inl
+HDR_LNS_F_EXT_INL = $(LIB_DIR)/lns_f_ext.inl
 HDR_LNSSIM     		= $(LIB_DIR)/lnssim.hpp
 HDR_LNSSIM_INL 		= $(LIB_DIR)/lnssim.inl
 HDR_LUTS       		= $(LIB_DIR)/lnsluts.hpp
@@ -46,6 +47,7 @@ install:
 	install -d $(CXX_SYSINCLUDE)
 	install -m 644 $(HDR_LNS)        		$(CXX_SYSINCLUDE)/lns
 	install -m 644 $(HDR_LNS_INL)       $(CXX_SYSINCLUDE)/lns.inl
+	install -m 644 $(HDR_LNS_F_EXT_INL) $(CXX_SYSINCLUDE)/lns_f_ext.inl
 	install -m 644 $(HDR_LNSSIM)     		$(CXX_SYSINCLUDE)/lnssim
 	install -m 644 $(HDR_LNSSIM_INL) 		$(CXX_SYSINCLUDE)/lnssim.inl
 	install -m 644 $(HDR_LUTS)       		$(CXX_SYSINCLUDE)/lnsluts
@@ -58,6 +60,7 @@ uninstall:
 	@echo "$(BLUE)Removing installed headers from $(CXX_SYSINCLUDE)...$(RESET)"
 	rm -f $(CXX_SYSINCLUDE)/lns
 	rm -f $(CXX_SYSINCLUDE)/lns.inl
+	rm -f $(CXX_SYSINCLUDE)/lns_f_ext.inl
 	rm -f $(CXX_SYSINCLUDE)/lnssim
 	rm -f $(CXX_SYSINCLUDE)/lnssim.inl
 	rm -f $(CXX_SYSINCLUDE)/lnsluts
